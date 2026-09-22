@@ -1,0 +1,6 @@
+sop.internal.example.com {
+    tls C:/ProgramData/SOP-IGS/certs/server.crt C:/ProgramData/SOP-IGS/certs/server.key
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:8000
+}
+

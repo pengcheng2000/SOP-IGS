@@ -1,0 +1,47 @@
+template_key: liquid-cooled-cabinet
+version: "1"
+manifest_version: "3"
+source_sha256: 33806c9949a23a397c6d3d039659c6b6823914048c3e2b7c592b0750ecb0d756
+master_sha256: e06985520105b6ad0ca05d3dc53a094625f80664fa9625342fa6115817356251
+test_root:
+  title: 测试项目
+  num_id: 2
+  level: 0
+summary_table:
+  header: [序号, 测试项目, 测试情况及问题, 测试结果, 备注]
+  preserve_prefix_rows: 6
+section_selector:
+  style_ids: ["2", "3"]
+  num_id: 2
+  match: title-and-level
+photo_anchor:
+  strategy: before-first-test-conclusion-or-next-heading
+  layout_version: "1.0"
+photo_groups:
+  cabinet_strength_static:
+    - {key: open_door, title: 开门照片, requiredness: required, min_photos: 1}
+  cabinet_strength_lifting:
+    - {key: lifting_process, title: 吊装过程, requiredness: required, min_photos: 1, preferred_columns: 2}
+    - {key: weight_display, title: 重量显示, requiredness: required, min_photos: 1, layout_profile: full_width_figure}
+  cabinet_strength_forklift:
+    - {key: forklift_process, title: 叉举过程, requiredness: required, min_photos: 1, preferred_columns: 2}
+    - {key: after_open_door, title: 测试后开门, requiredness: required, min_photos: 1}
+  module_data:
+    - {key: dehumidifier, title: 除湿机, requiredness: recommended, layout_profile: fixed_columns, preferred_columns: 3}
+    - {key: charging, title: 充电, requiredness: recommended, layout_profile: fixed_columns, preferred_columns: 2}
+    - {key: parallel_operation, title: 多机并联, requiredness: optional, layout_profile: fixed_columns, preferred_columns: 2}
+  alarm_bms:
+    - {key: alarm_evidence, title: 报警图片展示, requiredness: recommended, layout_profile: fixed_columns, preferred_columns: 2}
+  alarm_fire:
+    - {key: smoke, title: 烟感, requiredness: recommended, layout_profile: fire_two_column}
+    - {key: temperature, title: 温感, requiredness: recommended, layout_profile: fire_two_column}
+    - {key: aerosol, title: 气溶胶喷洒, requiredness: recommended, layout_profile: fire_two_column}
+    - {key: gas_fault, title: 可燃气体故障, requiredness: recommended, layout_profile: fire_two_column}
+    - {key: gas_low, title: 可燃气体低报, requiredness: recommended, layout_profile: fire_two_column}
+    - {key: gas_high, title: 可燃气体高报, requiredness: recommended, layout_profile: fire_two_column}
+  temperature_rise:
+    - {key: temperature_curve, title: 温升曲线, requiredness: recommended, layout_profile: temperature_curve}
+  default_for_other_leaf_items:
+    - {key: test_photos, title: 测试照片, requiredness: recommended, layout_profile: adaptive_grid}
+fixed_media:
+  preserve_first_drawing_as_logo: true

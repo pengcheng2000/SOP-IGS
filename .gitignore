@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+.env
+*.log
+.openai/
+data/
+runtime/
+tests/output/
+
+# Public repository safety: these inputs contain historical project data.
+SOP_case/
+templates/liquid-cooled-cabinet/v1/source.docx

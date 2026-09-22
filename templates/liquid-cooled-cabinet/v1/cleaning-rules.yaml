@@ -1,0 +1,19 @@
+version: "1"
+policy:
+  preserve:
+    - test standards
+    - technical requirements
+    - methods and acceptance criteria
+    - table headers and formulas
+    - styles, numbering, sections, header and footer
+    - company logo
+  clear:
+    - historical photos
+    - cover and approval values
+    - sample identification values
+    - summary results and remarks
+    - project-specific measured values after business review
+review_required:
+  - The generated master removes historical media and obvious metadata automatically.
+  - A domain owner must review every test-data table and project-specific paragraph before production approval.
+

@@ -17,6 +17,17 @@ class UserResponse(BaseModel):
     display_name: str
     role: str
     csrf_token: str | None = None
+    can_change_password: bool = False
+
+
+class AdminUserUpdate(BaseModel):
+    role: str | None = Field(default=None, pattern=r"^(admin|user)$")
+    is_active: bool | None = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=10, max_length=256)
 
 
 class AdminUserCreate(BaseModel):

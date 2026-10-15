@@ -200,7 +200,7 @@ export default function TestSelection({
                     </List.Item>
                   )}
                 />
-                <Button type="primary" ghost onClick={acceptAdvice} disabled={!recommended.size}>采纳全部推荐</Button>
+                <Button className="ai-accept-button" type="primary" size="large" icon={<CheckCircleFilled />} onClick={acceptAdvice} disabled={!recommended.size} block>采纳全部推荐</Button>
               </>
             ) : advice.data?.status === "pending" ? (
               <Spin tip="AI 正在分析" />

@@ -1,0 +1,28 @@
+.source-current { margin-top: 20px; }
+.source-issues ul { margin: 4px 0 0; padding-left: 18px; }
+.source-issues li { margin: 2px 0; }
+.source-preview { margin-top: 16px; }
+.preview-chapter { font-weight: 600; }
+.preview-heading { margin: 14px 0 6px; font-weight: 600; }
+.preview-heading.level-4 { margin-left: 18px; font-weight: 500; }
+.preview-number { margin-right: 8px; color: #0f766e; }
+.preview-paragraph, .preview-note { margin: 4px 0 4px 18px; line-height: 1.7; }
+.preview-note { padding: 6px 10px; border-radius: 8px; background: #fff8e6; }
+.preview-list { margin: 4px 0 4px 18px; padding-left: 24px; }
+.preview-list li.sub { margin-left: 22px; list-style-type: lower-alpha; }
+.preview-table-wrap { margin: 8px 0 8px 18px; overflow-x: auto; }
+.preview-table { border-collapse: collapse; min-width: 60%; font-size: 13px; }
+.preview-table td { border: 1px solid #c7d2cf; padding: 4px 8px; vertical-align: middle; text-align: center; }
+.preview-table tr.header td { background: #f1f7f5; font-weight: 600; }
+.preview-image { margin: 8px 0 8px 18px; }
+.preview-revisions { margin-top: 14px; color: #4b5d5a; }
+.boost-fixed-hint { font-size: 13px; }
+.boost-fixed-hint a { margin-left: 6px; }
+.boost-fixed-list { margin: 0; padding-left: 18px; max-width: 520px; font-size: 13px; line-height: 1.8; }
+.template-banner { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 16px 20px; margin-bottom: 18px; border-radius: 12px; border: 1px solid #99d6c8; border-left: 5px solid #0f766e; background: linear-gradient(90deg, #e6f6f1, #f4fbf9); }
+.template-banner-text { display: flex; align-items: flex-start; gap: 12px; }
+.template-banner-icon { font-size: 26px; color: #0f766e; margin-top: 2px; }
+.template-banner h4 { margin: 0 0 2px; font-size: 16px; color: #0b4f47; }
+.template-banner p { margin: 0; color: #38605a; font-size: 13px; line-height: 1.7; }
+.template-banner .ant-btn { flex: none; height: 44px; padding: 0 22px; font-weight: 600; box-shadow: 0 6px 16px rgba(15,118,110,.28); }
+@media (max-width: 700px) { .template-banner { flex-direction: column; align-items: stretch; } }

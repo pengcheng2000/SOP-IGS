@@ -9,12 +9,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .api import admin, advice, auth, generation, photos, projects
+from .boost.api import router as boost_router
+from .boost.bootstrap import bootstrap_boost
 from .bootstrap import bootstrap
 from .config import REPOSITORY_ROOT, get_settings
 from .db import engine
@@ -43,6 +45,7 @@ LOGGER = logging.getLogger("sop.api")
 async def lifespan(app: FastAPI):
     del app
     bootstrap()
+    bootstrap_boost()
     yield
 
 
@@ -115,7 +118,13 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
 app.include_router(advice.router, prefix="/api")
 app.include_router(generation.router, prefix="/api")
+app.include_router(boost_router, prefix="/api")
 
 frontend_dist = REPOSITORY_ROOT / "frontend" / "dist"
 if frontend_dist.is_dir():
+
+    @app.get("/login", include_in_schema=False)
+    def login_page() -> FileResponse:
+        return FileResponse(frontend_dist / "index.html")
+
     app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")

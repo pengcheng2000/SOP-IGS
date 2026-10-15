@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from functools import lru_cache
 
@@ -10,6 +11,8 @@ from pydantic import ValidationError
 from ..config import Settings
 from ..domain.catalog import LEAF_IDS
 from ..schemas import AIAdvicePayload
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AIAdviceError(RuntimeError):
@@ -102,11 +105,15 @@ class AIAdvisoryClient:
                     return result
             except (httpx.HTTPError, KeyError, TypeError, ValidationError, AIAdviceError) as exc:
                 last_error = exc
+                LOGGER.warning("LLM advice attempt %s failed: %s: %s", attempt + 1, type(exc).__name__, exc)
                 if attempt == 0:
                     continue
         self.failure_count += 1
         if self.failure_count >= 5:
             self.open_until = time.monotonic() + 60
+        # Timeouts and connection problems mean the service is unavailable, not that it answered badly.
+        if isinstance(last_error, httpx.TransportError | httpx.HTTPStatusError):
+            raise AIAdviceError("AI_UNAVAILABLE", str(last_error))
         raise AIAdviceError("AI_RESPONSE_INVALID", str(last_error or "LLM 请求失败"))
 
 

@@ -20,3 +20,4 @@ tests/output/
 # Public repository safety: these inputs contain historical project data.
 SOP_case/
 templates/liquid-cooled-cabinet/v1/source.docx
+templates/boost-integrated-unit/v1/source.docx

@@ -65,9 +65,14 @@ def project_payload(db: Session, project: Project) -> dict:
     }
 
 
-def get_project_or_404(db: Session, project_id: str) -> Project:
+def owns_project(db: Session, project_id: str, user: User) -> bool:
     project = db.get(Project, project_id)
-    if project is None:
+    return project is not None and project.created_by == user.id
+
+
+def get_project_or_404(db: Session, project_id: str, user: User) -> Project:
+    project = db.get(Project, project_id)
+    if project is None or project.created_by != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "项目不存在")
     return project
 
@@ -84,8 +89,9 @@ def get_test_items(version: str, user: User = Depends(current_user)) -> dict:
 def list_projects(
     db: Session = Depends(get_db), user: User = Depends(current_user)
 ) -> list[dict]:
-    del user
-    projects = db.scalars(select(Project).order_by(Project.updated_at.desc())).all()
+    projects = db.scalars(
+        select(Project).where(Project.created_by == user.id).order_by(Project.updated_at.desc())
+    ).all()
     return [project_payload(db, project) for project in projects]
 
 
@@ -121,8 +127,7 @@ def get_project(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> dict:
-    del user
-    return project_payload(db, get_project_or_404(db, project_id))
+    return project_payload(db, get_project_or_404(db, project_id, user))
 
 
 @router.patch("/projects/{project_id}")
@@ -132,7 +137,7 @@ def update_project(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    project = get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id, user)
     if project.revision != payload.revision:
         raise HTTPException(status.HTTP_409_CONFLICT, "项目已被其他操作更新，请刷新后重试")
     values = payload.model_dump(exclude={"revision"}, exclude_none=True)
@@ -152,7 +157,7 @@ def update_selection(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    project = get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id, user)
     if project.revision != payload.revision:
         raise HTTPException(status.HTTP_409_CONFLICT, "项目已被其他操作更新，请刷新后重试")
     requested = set(payload.test_item_ids)
@@ -181,8 +186,7 @@ def preflight(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> dict:
-    del user
-    project = get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id, user)
     selected = selected_ids(db, project_id)
     blockers: list[dict] = []
     warnings: list[dict] = []

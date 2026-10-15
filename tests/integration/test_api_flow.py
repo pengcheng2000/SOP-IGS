@@ -196,3 +196,106 @@ def test_authenticated_project_flow(tmp_path: Path, monkeypatch):
         assert client.post(f"/api/projects/{project['id']}/photos", headers=headers,
                            data={"photo_group_id": sample_groups[0]["id"]},
                            files={"files": ("extra.jpg", image_bytes.getvalue(), "image/jpeg")}).status_code == 413
+
+
+def test_projects_are_isolated_per_user_and_password_can_change(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SOP_DATABASE_URL", f"sqlite:///{(tmp_path / 'isolation.db').as_posix()}")
+    monkeypatch.setenv("SOP_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SOP_BOOTSTRAP_ADMIN_PASSWORD", "test-admin-password")
+
+    config = importlib.import_module("app.config")
+    config.get_settings.cache_clear()
+    main = importlib.import_module("app.main")
+
+    def login(client: TestClient, username: str, password: str) -> dict:
+        response = client.post("/api/auth/login", json={"username": username, "password": password})
+        assert response.status_code == 200, response.text
+        return {"X-CSRF-Token": response.json()["csrf_token"]}
+
+    with TestClient(main.app) as admin, TestClient(main.app) as tester:
+        admin_headers = login(admin, "admin", "test-admin-password")
+        assert admin.post(
+            "/api/admin/users",
+            json={"username": "isolation-tester", "display_name": "隔离用户", "password": "long-test-password"},
+            headers=admin_headers,
+        ).status_code == 201
+        project = admin.post(
+            "/api/projects", json={"name": "管理员项目", "description": ""}, headers=admin_headers
+        ).json()
+        admin.put(
+            f"/api/projects/{project['id']}/selection",
+            json={"revision": project["revision"], "test_item_ids": ["alarm_bms"], "source": "manual"},
+            headers=admin_headers,
+        )
+        group = next(
+            g for g in admin.get(f"/api/projects/{project['id']}/photo-groups").json()
+            if g["key"] == "alarm_evidence"
+        )
+        image_bytes = BytesIO()
+        Image.new("RGB", (40, 30), "green").save(image_bytes, format="JPEG")
+        photo = admin.post(
+            f"/api/projects/{project['id']}/photos",
+            data={"photo_group_id": group["id"]},
+            files={"files": ("alarm.jpg", image_bytes.getvalue(), "image/jpeg")},
+            headers=admin_headers,
+        ).json()[0]
+        task = admin.post(
+            f"/api/projects/{project['id']}/generations",
+            json={"idempotency_key": "isolation-task", "allow_warnings": True},
+            headers=admin_headers,
+        ).json()
+
+        tester_headers = login(tester, "isolation-tester", "long-test-password")
+        assert tester.get("/api/projects").json() == []
+        own = tester.post(
+            "/api/projects", json={"name": "测试用户项目", "description": ""}, headers=tester_headers
+        ).json()
+        assert [p["id"] for p in tester.get("/api/projects").json()] == [own["id"]]
+        admin_ids = {p["id"] for p in admin.get("/api/projects").json()}
+        assert project["id"] in admin_ids and own["id"] not in admin_ids
+
+        pid = project["id"]
+        for path in (
+            f"/api/projects/{pid}",
+            f"/api/projects/{pid}/preflight",
+            f"/api/projects/{pid}/photo-groups",
+            f"/api/projects/{pid}/photos",
+            f"/api/projects/{pid}/generated-documents",
+            f"/api/projects/{pid}/ai-advice",
+            f"/api/photos/{photo['id']}/content",
+            f"/api/generations/{task['id']}",
+        ):
+            assert tester.get(path).status_code == 404, path
+        assert tester.patch(
+            f"/api/projects/{pid}", json={"revision": project["revision"], "name": "篡改"}, headers=tester_headers
+        ).status_code == 404
+        assert tester.patch(
+            f"/api/photos/{photo['id']}", json={"caption": "篡改"}, headers=tester_headers
+        ).status_code == 404
+        assert tester.delete(f"/api/photos/{photo['id']}", headers=tester_headers).status_code == 404
+        assert tester.put(
+            f"/api/photo-groups/{group['id']}/order", json={"photo_ids": [photo["id"]]}, headers=tester_headers
+        ).status_code == 404
+        assert admin.get(f"/api/photos/{photo['id']}/content").status_code == 200
+
+        wrong = tester.post(
+            "/api/auth/password",
+            json={"current_password": "not-the-password", "new_password": "brand-new-password"},
+            headers=tester_headers,
+        )
+        assert wrong.status_code == 400
+        with TestClient(main.app) as other_device:
+            login(other_device, "isolation-tester", "long-test-password")
+            changed = tester.post(
+                "/api/auth/password",
+                json={"current_password": "long-test-password", "new_password": "brand-new-password"},
+                headers=tester_headers,
+            )
+            assert changed.status_code == 204
+            assert tester.get("/api/auth/me").status_code == 200
+            assert other_device.get("/api/auth/me").status_code == 401
+        assert tester.post(
+            "/api/auth/login", json={"username": "isolation-tester", "password": "long-test-password"}
+        ).status_code == 401
+        login(tester, "isolation-tester", "brand-new-password")
+

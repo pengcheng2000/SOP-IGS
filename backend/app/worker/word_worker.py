@@ -13,6 +13,8 @@ from pathlib import Path
 
 from sqlalchemy import and_, or_, select
 
+from ..boost.bootstrap import bootstrap_boost
+from ..boost.worker import claim_boost_task, run_boost_task
 from ..bootstrap import bootstrap
 from ..config import get_settings
 from ..db import SessionLocal
@@ -336,6 +338,7 @@ def run_task(task_id: str) -> None:
 
 def main() -> None:
     bootstrap()
+    bootstrap_boost()
     settings = get_settings()
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     LOGGER.info("Word worker started id=%s com=%s", worker_id, settings.word_com_enabled)
@@ -343,6 +346,10 @@ def main() -> None:
         task_id = claim_task(worker_id)
         if task_id:
             run_task(task_id)
+            continue
+        boost_task_id = claim_boost_task(worker_id)
+        if boost_task_id:
+            run_boost_task(boost_task_id)
         else:
             time.sleep(settings.worker_poll_seconds)
 

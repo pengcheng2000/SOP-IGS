@@ -24,7 +24,7 @@ from ..services.image_pipeline import ImagePipelineError, process_image
 from ..services.photo_groups import ensure_project_photo_groups, group_photo_counts
 from ..storage import LocalBlobStore
 from .deps import current_user, require_csrf
-from .projects import get_project_or_404
+from .projects import get_project_or_404, owns_project
 
 router = APIRouter(tags=["photos"])
 
@@ -67,6 +67,21 @@ def group_payload(group: PhotoGroup, photo_count: int = 0) -> dict:
     }
 
 
+def get_group_or_404(db: Session, group_id: str, user: User) -> PhotoGroup:
+    group = db.get(PhotoGroup, group_id)
+    if group is None or not owns_project(db, group.project_id, user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片分组不存在")
+    return group
+
+
+def get_photo_or_404(db: Session, photo_id: str, user: User) -> Photo:
+    photo = db.get(Photo, photo_id)
+    group = db.get(PhotoGroup, photo.photo_group_id) if photo is not None else None
+    if photo is None or group is None or not owns_project(db, group.project_id, user):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片不存在")
+    return photo
+
+
 def selected_leaf(db: Session, project_id: str, test_item_id: str) -> bool:
     return bool(
         db.scalar(
@@ -84,8 +99,7 @@ def list_photo_groups(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> list[dict]:
-    del user
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     groups = ensure_project_photo_groups(db, project_id)
     db.commit()
     counts = group_photo_counts(db, project_id)
@@ -99,7 +113,7 @@ def create_photo_group(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     if payload.test_item_id not in LEAF_IDS or not selected_leaf(
         db, project_id, payload.test_item_id
     ):
@@ -143,9 +157,7 @@ def update_photo_group(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    group = db.get(PhotoGroup, group_id)
-    if group is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片分组不存在")
+    group = get_group_or_404(db, group_id, user)
     if group.source != "custom":
         raise HTTPException(status.HTTP_409_CONFLICT, "模板分组不能重命名")
     group.title = payload.title.strip()
@@ -167,9 +179,7 @@ def delete_photo_group(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> None:
-    group = db.get(PhotoGroup, group_id)
-    if group is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片分组不存在")
+    group = get_group_or_404(db, group_id, user)
     if group.source != "custom":
         raise HTTPException(status.HTTP_409_CONFLICT, "模板分组不能删除")
     count = db.scalar(select(func.count(Photo.id)).where(Photo.photo_group_id == group.id)) or 0
@@ -194,6 +204,7 @@ def reorder_photo_groups(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> list[dict]:
+    get_project_or_404(db, project_id, user)
     if not payload.photo_group_ids:
         return []
     requested = db.scalars(
@@ -236,8 +247,7 @@ def list_photos(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> list[dict]:
-    del user
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     rows = db.execute(
         select(Photo, PhotoGroup.test_item_id)
         .join(PhotoGroup, Photo.photo_group_id == PhotoGroup.id)
@@ -281,7 +291,7 @@ async def upload_photos(
     user: User = Depends(require_csrf),
     settings: Settings = Depends(get_settings),
 ) -> list[dict]:
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     if photo_group_id:
         group = db.get(PhotoGroup, photo_group_id)
         if group is None or group.project_id != project_id:
@@ -363,9 +373,7 @@ def update_photo(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    photo = db.get(Photo, photo_id)
-    if photo is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片不存在")
+    photo = get_photo_or_404(db, photo_id, user)
     source_group = db.get(PhotoGroup, photo.photo_group_id)
     if source_group is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "原照片分组不存在")
@@ -414,9 +422,7 @@ def reorder_photos(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> list[dict]:
-    group = db.get(PhotoGroup, group_id)
-    if group is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片分组不存在")
+    group = get_group_or_404(db, group_id, user)
     rows = db.scalars(select(Photo).where(Photo.photo_group_id == group_id)).all()
     if {row.id for row in rows} != set(payload.photo_ids) or len(rows) != len(payload.photo_ids):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "排序列表必须包含组内全部照片且不得重复")
@@ -441,9 +447,7 @@ def delete_photo(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> None:
-    photo = db.get(Photo, photo_id)
-    if photo is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "照片不存在")
+    photo = get_photo_or_404(db, photo_id, user)
     for value in (photo.original_path, photo.processed_path):
         if value:
             Path(value).unlink(missing_ok=True)
@@ -465,8 +469,7 @@ def photo_content(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> FileResponse:
-    del user
-    photo = db.get(Photo, photo_id)
-    if photo is None or not photo.processed_path or not Path(photo.processed_path).is_file():
+    photo = get_photo_or_404(db, photo_id, user)
+    if not photo.processed_path or not Path(photo.processed_path).is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "照片文件不存在")
     return FileResponse(photo.processed_path, media_type=photo.mime_type)

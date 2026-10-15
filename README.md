@@ -11,7 +11,7 @@ python -m venv .venv
 .\.venv\Scripts\python -m pip install -e ".\backend[dev]"
 Copy-Item .env.example .env
 .\.venv\Scripts\python -m app.bootstrap
-.\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --reload --port 8000
+.\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --reload --port 8010
 ```
 
 ### 前端

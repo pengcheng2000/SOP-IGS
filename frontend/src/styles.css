@@ -46,6 +46,9 @@ button, input, textarea { font: inherit; }
 .ai-card .ant-list-item { border-color: rgba(255,255,255,.12); }
 .ai-orb { width: 54px; height: 54px; border-radius: 18px; display: grid; place-items: center; background: rgba(62,207,180,.18); color: #6ee7cf; font-size: 24px; margin-bottom: 18px; }
 .ai-card > .ant-card-body > * { margin-bottom: 16px; }
+.ai-card .ai-accept-button { height: 44px; font-weight: 600; color: #072a26; background: #5eead4; border-color: #5eead4; box-shadow: 0 6px 18px rgba(94,234,212,.28); }
+.ai-card .ai-accept-button:not(:disabled):hover { color: #072a26 !important; background: #99f6e4 !important; border-color: #99f6e4 !important; }
+.ai-card .ai-accept-button:disabled { color: var(--ai-muted); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); box-shadow: none; }
 .photo-sections { display: grid; gap: 18px; }
 .photo-groups { display: grid; gap: 16px; }
 .photo-group-card { border: 1px solid #dce5e2; border-radius: 14px; padding: 16px; transition: border-color .2s, box-shadow .2s, background .2s; }
@@ -71,6 +74,7 @@ button, input, textarea { font: inherit; }
 .task-progress { margin-top: 24px; padding: 20px; border-radius: 12px; background: #f1f7f5; }
 .task-progress-head { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
 .warning-confirm { display: block; padding: 12px 14px; margin: 14px 0; border-radius: 10px; background: #fff8e6; }
+
 
 .login-page { min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); background: #092d2a; overflow: auto; }
 .login-brand { position: relative; padding: clamp(44px, 7vw, 128px); display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
@@ -117,3 +121,10 @@ button, input, textarea { font: inherit; }
   .photo-grid { grid-template-columns: 1fr; }
   .task-progress-head, .upload-progress > div:first-child { flex-direction: column; gap: 4px; }
 }
+.feishu-qr { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 320px; }
+.feishu-qr-frame { width: 260px; height: 290px; display: flex; justify-content: center; }
+.feishu-qr-frame[hidden] { display: none; }
+.feishu-qr-loading { position: absolute; inset: 0 0 30px; display: grid; place-items: center; }
+.feishu-qr-fallback { width: 100%; display: grid; gap: 12px; padding: 40px 0 12px; text-align: center; }
+.feishu-qr-hint { font-size: 13px; }
+.login-switch { display: block; margin: 10px auto 0; color: #70807d; }

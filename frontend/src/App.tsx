@@ -2,6 +2,7 @@ import {
   ArrowLeftOutlined,
   FileWordOutlined,
   FolderOpenOutlined,
+  KeyOutlined,
   LogoutOutlined,
   PlusOutlined,
   SafetyCertificateOutlined,
@@ -23,19 +24,25 @@ import {
   Modal,
   Row,
   Segmented,
+  Select,
   Skeleton,
   Space,
   Spin,
+  Switch,
   Tag,
   Typography
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, setCsrfToken } from "./api";
 import BrandLogo from "./components/BrandLogo";
+import FeishuQrLogin from "./components/FeishuQrLogin";
+import BoostProjectCard from "./features/boost/BoostProjectCard";
+import BoostWorkspace, { useBoostConfig } from "./features/boost/BoostWorkspace";
+import type { BoostProject } from "./features/boost/types";
 import GenerationPanel from "./features/generation/GenerationPanel";
 import PhotoWorkspace from "./features/photos/PhotoWorkspace";
 import TestSelection from "./features/test-selection/TestSelection";
-import type { Project, TreeItem, User } from "./types";
+import type { ManagedUser, Project, TreeItem, User } from "./types";
 
 const { Header, Content } = Layout;
 const { Title, Text, Paragraph } = Typography;
@@ -47,6 +54,18 @@ function flatten(items: TreeItem[]): TreeItem[] {
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
   const { message } = AntApp.useApp();
   const [busy, setBusy] = useState(false);
+  const [localLogin, setLocalLogin] = useState(false);
+  const providers = useQuery({
+    queryKey: ["auth-providers"],
+    queryFn: () => api<{ local: boolean; feishu: boolean }>("/api/auth/providers")
+  });
+  useEffect(() => {
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error) {
+      message.error(`正泰飞讯登录失败：${error}`);
+      window.history.replaceState({}, document.title, "/");
+    }
+  }, [message]);
   async function submit(values: { username: string; password: string }) {
     setBusy(true);
     try {
@@ -55,6 +74,7 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
         body: JSON.stringify(values)
       });
       setCsrfToken(user.csrf_token);
+      if (window.location.pathname !== "/") window.history.replaceState({}, document.title, "/");
       onLogin(user);
     } catch (error) {
       message.error(error instanceof Error ? error.message : "登录失败");
@@ -76,26 +96,56 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
       <Card className="login-card" bordered={false}>
         <Text type="secondary">欢迎回来</Text>
         <Title level={2}>登录 SOP 工作台</Title>
-        <Form layout="vertical" onFinish={submit} initialValues={{ username: "admin" }} size="large">
-          <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-            <Input autoComplete="username" />
-          </Form.Item>
-          <Form.Item name="password" label="密码" rules={[{ required: true }]}>
-            <Input.Password autoComplete="current-password" />
-          </Form.Item>
-          <Button type="primary" htmlType="submit" loading={busy} block>登录</Button>
-        </Form>
+        {providers.isLoading ? <Skeleton active /> : providers.data?.feishu && !localLogin ? (
+          <>
+            <FeishuQrLogin />
+            <Button type="link" size="small" className="login-switch" onClick={() => setLocalLogin(true)}>管理员账号登录</Button>
+          </>
+        ) : (
+          <>
+            <Form layout="vertical" onFinish={submit} size="large">
+              <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
+                <Input autoComplete="username" />
+              </Form.Item>
+              <Form.Item name="password" label="密码" rules={[{ required: true }]}>
+                <Input.Password autoComplete="current-password" />
+              </Form.Item>
+              <Button type="primary" htmlType="submit" loading={busy} block>登录</Button>
+            </Form>
+            {providers.data?.feishu && <Button type="link" size="small" className="login-switch" onClick={() => setLocalLogin(false)}>返回正泰飞讯扫码登录</Button>}
+          </>
+        )}
       </Card>
     </div>
   );
 }
 
-function ProjectList({ onOpen }: { onOpen: (project: Project) => void }) {
+type ProductKind = "cabinet" | "boost";
+
+function ProjectList({ onOpen, onOpenBoost }: { onOpen: (project: Project) => void; onOpenBoost: (project: BoostProject) => void }) {
   const { message } = AntApp.useApp();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [productKind, setProductKind] = useState<ProductKind>("cabinet");
   const [form] = Form.useForm();
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => api<Project[]>("/api/projects") });
+  const boostProjects = useQuery({ queryKey: ["boost-projects"], queryFn: () => api<BoostProject[]>("/api/boost/projects") });
+  const boostConfig = useBoostConfig();
+  const listItems = [
+    ...(projects.data ?? []).map((project) => ({ kind: "cabinet" as const, project, updatedAt: project.updated_at })),
+    ...(boostProjects.data ?? []).map((project) => ({ kind: "boost" as const, project, updatedAt: project.updated_at }))
+  ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const createBoost = useMutation({
+    mutationFn: (values: { name: string; description: string }) =>
+      api<BoostProject>("/api/boost/projects", { method: "POST", body: JSON.stringify(values) }),
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["boost-projects"] });
+      setModalOpen(false);
+      form.resetFields();
+      onOpenBoost(project);
+    },
+    onError: (error) => message.error(error.message)
+  });
   const create = useMutation({
     mutationFn: (values: { name: string; description: string }) =>
       api<Project>("/api/projects", { method: "POST", body: JSON.stringify(values) }),
@@ -117,25 +167,35 @@ function ProjectList({ onOpen }: { onOpen: (project: Project) => void }) {
         </div>
         <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建项目</Button>
       </section>
-      {projects.isLoading ? <Skeleton active /> : projects.data?.length ? (
+      {projects.isLoading || boostProjects.isLoading ? <Skeleton active /> : listItems.length ? (
         <Row gutter={[18, 18]}>
-          {projects.data.map((project) => (
-            <Col xs={24} lg={12} xl={8} key={project.id}>
-              <Card className="project-card" hoverable onClick={() => onOpen(project)}>
-                <div className="project-card-head"><div className="project-icon"><FolderOpenOutlined /></div><Tag color={project.status === "active" ? "green" : "default"}>{project.status === "active" ? "进行中" : project.status}</Tag></div>
-                <Title level={4}>{project.name}</Title>
-                <Paragraph ellipsis={{ rows: 2 }}>{project.description || "尚未填写项目说明"}</Paragraph>
-                <div className="project-stats"><span><b>{project.selected_test_item_ids.length}</b> 测试项</span><span><b>{project.photo_count}</b> 照片</span><span>版本 {project.document_version}</span></div>
+          {listItems.map((item) => item.kind === "boost" ? (
+            <Col xs={24} lg={12} xl={8} key={item.project.id}><BoostProjectCard project={item.project} onOpen={onOpenBoost} /></Col>
+          ) : (
+            <Col xs={24} lg={12} xl={8} key={item.project.id}>
+              <Card className="project-card" hoverable onClick={() => onOpen(item.project)}>
+                <div className="project-card-head"><div className="project-icon"><FolderOpenOutlined /></div><Space size={4}><Tag color="blue">工商业柜</Tag><Tag color={item.project.status === "active" ? "green" : "default"}>{item.project.status === "active" ? "进行中" : item.project.status}</Tag></Space></div>
+                <Title level={4}>{item.project.name}</Title>
+                <Paragraph ellipsis={{ rows: 2 }}>{item.project.description || "尚未填写项目说明"}</Paragraph>
+                <div className="project-stats"><span><b>{item.project.selected_test_item_ids.length}</b> 测试项</span><span><b>{item.project.photo_count}</b> 照片</span><span>版本 {item.project.document_version}</span></div>
               </Card>
             </Col>
           ))}
         </Row>
       ) : <Empty description="还没有 SOP 项目" />}
       <Modal title="新建 SOP 项目" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
-        <Form form={form} layout="vertical" onFinish={(values) => create.mutate(values)}>
-          <Form.Item name="name" label="项目名称" rules={[{ required: true, message: "请输入项目名称" }]}><Input placeholder="例如：125kW 液冷户外柜型式测试" /></Form.Item>
+        <Form form={form} layout="vertical" onFinish={(values) => (productKind === "boost" ? createBoost : create).mutate(values)}>
+          <Form.Item label="产品类型">
+            <Segmented
+              block
+              value={productKind}
+              onChange={(value) => setProductKind(value as ProductKind)}
+              options={[{ value: "cabinet", label: "工商业柜" }, { value: "boost", label: "升压一体机", disabled: !boostConfig.data?.available }]}
+            />
+          </Form.Item>
+          <Form.Item name="name" label="项目名称" rules={[{ required: true, message: "请输入项目名称" }]}><Input placeholder={productKind === "boost" ? "例如：某项目站点升压一体机测试需求" : "例如：125kW 液冷户外柜型式测试"} /></Form.Item>
           <Form.Item name="description" label="项目说明"><Input.TextArea rows={4} placeholder="说明产品、使用场景和本次测试差异" /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={create.isPending} block>创建并进入</Button>
+          <Button type="primary" htmlType="submit" loading={create.isPending || createBoost.isPending} block>创建并进入</Button>
         </Form>
       </Modal>
     </main>
@@ -218,20 +278,62 @@ function Workspace({ initial, onBack, isAdmin }: { initial: Project; onBack: () 
   );
 }
 
-function UserAdmin({ open, onClose }: { open: boolean; onClose: () => void }) {
+function UserAdmin({ open, onClose, currentUserId }: { open: boolean; onClose: () => void; currentUserId: string }) {
   const { message } = AntApp.useApp();
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
-  const users = useQuery({ queryKey: ["admin-users"], queryFn: () => api<Array<{ id: string; username: string; display_name: string; role: string }>>("/api/admin/users"), enabled: open });
+  const users = useQuery({ queryKey: ["admin-users"], queryFn: () => api<ManagedUser[]>("/api/admin/users"), enabled: open });
   const create = useMutation({
     mutationFn: (values: Record<string, string>) => api("/api/admin/users", { method: "POST", body: JSON.stringify({ ...values, role: "user" }) }),
     onSuccess: () => { form.resetFields(); queryClient.invalidateQueries({ queryKey: ["admin-users"] }); message.success("账号已创建"); },
     onError: (error) => message.error(error.message)
   });
+  const update = useMutation({
+    mutationFn: ({ id, ...values }: { id: string; role?: string; is_active?: boolean }) =>
+      api<ManagedUser>(`/api/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(values) }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["admin-users"] }); message.success("权限已更新"); },
+    onError: (error) => message.error(error.message)
+  });
   return (
-    <Modal title="本地账号管理" open={open} onCancel={onClose} footer={null}>
-      <List size="small" loading={users.isLoading} dataSource={users.data ?? []} renderItem={(item) => <List.Item extra={<Tag>{item.role}</Tag>}><List.Item.Meta avatar={<Avatar>{item.display_name.slice(0, 1)}</Avatar>} title={item.display_name} description={item.username} /></List.Item>} />
-      <Title level={5}>创建普通用户</Title>
+    <Modal title="账号与权限管理" open={open} onCancel={onClose} footer={null} width={640}>
+      <List
+        size="small"
+        loading={users.isLoading}
+        dataSource={users.data ?? []}
+        renderItem={(item) => {
+          const self = item.id === currentUserId;
+          return (
+            <List.Item
+              extra={
+                <Space>
+                  <Select
+                    size="small"
+                    value={item.role}
+                    disabled={self || update.isPending}
+                    style={{ width: 96 }}
+                    options={[{ value: "user", label: "普通用户" }, { value: "admin", label: "管理员" }]}
+                    onChange={(role) => update.mutate({ id: item.id, role })}
+                  />
+                  <Switch
+                    checked={item.is_active}
+                    disabled={self || update.isPending}
+                    checkedChildren="启用"
+                    unCheckedChildren="停用"
+                    onChange={(isActive) => update.mutate({ id: item.id, is_active: isActive })}
+                  />
+                </Space>
+              }
+            >
+              <List.Item.Meta
+                avatar={<Avatar>{item.display_name.slice(0, 1)}</Avatar>}
+                title={<Space size={6}>{item.display_name}{item.providers.map((provider) => <Tag key={provider} color={provider === "feishu" ? "blue" : "default"}>{provider === "feishu" ? "正泰飞讯" : "本地"}</Tag>)}</Space>}
+                description={item.username ?? "正泰飞讯账号"}
+              />
+            </List.Item>
+          );
+        }}
+      />
+      <Title level={5}>创建本地普通用户</Title>
       <Form form={form} layout="vertical" onFinish={(values) => create.mutate(values)}>
         <Row gutter={12}><Col span={12}><Form.Item name="username" label="用户名" rules={[{ required: true }]}><Input /></Form.Item></Col><Col span={12}><Form.Item name="display_name" label="显示名" rules={[{ required: true }]}><Input /></Form.Item></Col></Row>
         <Form.Item name="password" label="初始密码" rules={[{ required: true, min: 10 }]}><Input.Password /></Form.Item>
@@ -241,11 +343,54 @@ function UserAdmin({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+function ChangePassword({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { message } = AntApp.useApp();
+  const [form] = Form.useForm();
+  const change = useMutation({
+    mutationFn: (values: { current_password: string; new_password: string }) =>
+      api("/api/auth/password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: values.current_password, new_password: values.new_password })
+      }),
+    onSuccess: () => { form.resetFields(); message.success("密码已修改，其他设备上的登录已失效"); onClose(); },
+    onError: (error) => message.error(error.message)
+  });
+  return (
+    <Modal title="修改密码" open={open} onCancel={() => { form.resetFields(); onClose(); }} footer={null} destroyOnHidden>
+      <Form form={form} layout="vertical" onFinish={(values) => change.mutate(values)}>
+        <Form.Item name="current_password" label="当前密码" rules={[{ required: true, message: "请输入当前密码" }]}>
+          <Input.Password autoComplete="current-password" />
+        </Form.Item>
+        <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: "请输入新密码" }, { min: 10, message: "新密码至少 10 位" }]}>
+          <Input.Password autoComplete="new-password" />
+        </Form.Item>
+        <Form.Item
+          name="confirm_password"
+          label="确认新密码"
+          dependencies={["new_password"]}
+          rules={[
+            { required: true, message: "请再次输入新密码" },
+            ({ getFieldValue }) => ({
+              validator: (_rule, value) => !value || value === getFieldValue("new_password") ? Promise.resolve() : Promise.reject(new Error("两次输入的新密码不一致"))
+            })
+          ]}
+        >
+          <Input.Password autoComplete="new-password" />
+        </Form.Item>
+        <Button type="primary" htmlType="submit" loading={change.isPending} block>确认修改</Button>
+      </Form>
+    </Modal>
+  );
+}
+
 function AppContent() {
   const [user, setUser] = useState<User>();
   const [checking, setChecking] = useState(true);
   const [activeProject, setActiveProject] = useState<Project>();
+  const [activeBoostProject, setActiveBoostProject] = useState<BoostProject>();
   const [userModal, setUserModal] = useState(false);
+  const [passwordModal, setPasswordModal] = useState(false);
+  const queryClient = useQueryClient();
   useEffect(() => {
     api<User>("/api/auth/me")
       .then((value) => { setCsrfToken(value.csrf_token); setUser(value); })
@@ -254,15 +399,20 @@ function AppContent() {
   }, []);
   if (checking) return <div className="center-screen"><Spin size="large" /></div>;
   if (!user) return <Login onLogin={setUser} />;
-  async function logout() { await api("/api/auth/logout", { method: "POST" }); setCsrfToken(); setUser(undefined); }
+  async function logout() { await api("/api/auth/logout", { method: "POST" }); setCsrfToken(); setActiveProject(undefined); setActiveBoostProject(undefined); queryClient.clear(); setUser(undefined); }
   return (
     <Layout className="app-layout">
       <Header className="app-header">
         <div className="header-brand"><BrandLogo compact /><div><b>SOP 智能生成</b><small>DOCUMENT ENGINE</small></div></div>
-        <Space><Text>你好，{user.display_name}</Text>{user.role === "admin" && <Button type="text" icon={<UserAddOutlined />} onClick={() => setUserModal(true)}>账号</Button>}<Button type="text" icon={<LogoutOutlined />} onClick={logout}>退出</Button></Space>
+        <Space><Text>你好，{user.display_name}</Text>{user.role === "admin" && <Button type="text" icon={<UserAddOutlined />} onClick={() => setUserModal(true)}>账号</Button>}{user.can_change_password && <Button type="text" icon={<KeyOutlined />} onClick={() => setPasswordModal(true)}>修改密码</Button>}<Button type="text" icon={<LogoutOutlined />} onClick={logout}>退出</Button></Space>
       </Header>
-      <Content>{activeProject ? <Workspace initial={activeProject} onBack={() => setActiveProject(undefined)} isAdmin={user.role === "admin"} /> : <ProjectList onOpen={setActiveProject} />}</Content>
-      <UserAdmin open={userModal} onClose={() => setUserModal(false)} />
+      <Content>
+        {activeProject ? <Workspace initial={activeProject} onBack={() => setActiveProject(undefined)} isAdmin={user.role === "admin"} />
+          : activeBoostProject ? <BoostWorkspace initial={activeBoostProject} onBack={() => setActiveBoostProject(undefined)} isAdmin={user.role === "admin"} />
+            : <ProjectList onOpen={setActiveProject} onOpenBoost={setActiveBoostProject} />}
+      </Content>
+      <UserAdmin open={userModal} onClose={() => setUserModal(false)} currentUserId={user.id} />
+      <ChangePassword open={passwordModal} onClose={() => setPasswordModal(false)} />
     </Layout>
   );
 }

@@ -1,0 +1,81 @@
+template_key: boost-integrated-unit
+version: '1'
+manifest_version: '1'
+source_sha256: 7ab29ad1a7f8cb345a1d3ce0f261fbd614d0f5b59cf3111a7b438db2995737d1
+master_sha256: 43996b5ba31032e1cf4291a3bcf860945df5aaf88bf21f864bebd567a410cb75
+anchors:
+  chapters: '{{BOOST_CHAPTERS}}'
+  revision_history: '{{REVISION_HISTORY}}'
+  prototypes_begin: '{{PROTOTYPES_BEGIN}}'
+  prototypes_end: '{{PROTOTYPES_END}}'
+chapter_root:
+  title: 调试项目
+  number: '5'
+  fixed_sections:
+  - 调试中的注意事项
+heading_numbering:
+  num_id: '3'
+  ilvl_by_level:
+    2: 1
+    3: 2
+    4: 3
+list_abstract_nums:
+  decimal: '9001'
+  letter: '9002'
+  bullet: '9003'
+summary_table:
+  header_contains: 调试项目
+  preserve_rows: 2
+floating_drawings: 2
+fields:
+- key: project_name
+  label: 项目/站点名称
+  required: true
+  placeholder: 例如：某项目（某站点）
+- key: document_number
+  label: 电子文件名
+  column: document_number
+  required: true
+  placeholder: 例如：201090149MTR（含后缀字母）
+- key: document_version
+  label: 版本
+  column: document_version
+  required: true
+- key: title_subject
+  label: 标题栏名称
+  placeholder: 例如：CPS ESS-项目简称
+- key: document_code
+  label: 编码
+- key: product_line
+  label: 所属产品
+  placeholder: 例如：CPS ESS
+- key: archive_month
+  label: 归档年月
+  type: month
+- key: drafter
+  label: 拟制
+- key: reviewer_1
+  label: 审核 1
+- key: reviewer_2
+  label: 审核 2
+- key: reviewer_3
+  label: 审核 3
+- key: standardizer
+  label: 标准化
+- key: approver
+  label: 批准
+- key: project_references
+  label: 项目参考文献
+  multiline: true
+  placeholder: 每行一条，只填项目专属文献，例如项目电气图、项目测试需求
+  fixed_lines:
+  - GB/T 7251.1-2023 低压成套开关设备和控制设备 第1部分：总则
+  - GB/T 6451-2023 油浸式电力变压器技术参数和要求
+  - GB/T 44026-2024 预制舱式锂离子电池储能系统技术规范
+  - GB/T 36276-2023 电力储能用锂离子电池
+  - GB/T 4208-2017 外壳防护等级（IP代码）
+  - GB/T 1413-2023 集装箱 分类、尺寸和额定质量
+input:
+  revision_sheet: 版本修改记录
+  ignored_sheets:
+  - 填写说明

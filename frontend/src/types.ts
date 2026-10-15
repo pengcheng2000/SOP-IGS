@@ -1,4 +1,14 @@
-export type User = { id: string; display_name: string; role: string; csrf_token?: string };
+export type User = { id: string; display_name: string; role: string; csrf_token?: string; can_change_password?: boolean };
+
+export type ManagedUser = {
+  id: string;
+  username: string | null;
+  feishu_open_id: string | null;
+  providers: string[];
+  display_name: string;
+  role: string;
+  is_active: boolean;
+};
 
 export type Project = {
   id: string;

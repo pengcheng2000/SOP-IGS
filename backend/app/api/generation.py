@@ -29,7 +29,7 @@ from ..schemas import GenerationRequest
 from ..services.photo_groups import ensure_project_photo_groups, group_photo_counts
 from ..time_utils import as_utc, utc_iso
 from .deps import current_user, require_csrf
-from .projects import get_project_or_404, selected_ids
+from .projects import get_project_or_404, owns_project, selected_ids
 
 router = APIRouter(tags=["generation"])
 
@@ -149,7 +149,7 @@ def create_generation(
     user: User = Depends(require_csrf),
     settings: Settings = Depends(get_settings),
 ) -> dict:
-    project = get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id, user)
     template = db.get(Template, project.template_id)
     if settings.env == "production" and (template is None or template.status != "approved"):
         raise HTTPException(
@@ -227,9 +227,8 @@ def get_generation(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> dict:
-    del user
     task = db.get(DocumentGenerationTask, task_id)
-    if task is None:
+    if task is None or not owns_project(db, task.project_id, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "生成任务不存在")
     return task_payload(db, task)
 
@@ -240,8 +239,7 @@ def list_generated_documents(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> list[dict]:
-    del user
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     documents = db.scalars(
         select(GeneratedDocument)
         .where(GeneratedDocument.project_id == project_id)
@@ -265,9 +263,12 @@ def download_document(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> FileResponse:
-    del user
     document = db.get(GeneratedDocument, document_id)
-    if document is None or not Path(document.file_path).is_file():
+    if (
+        document is None
+        or not owns_project(db, document.project_id, user)
+        or not Path(document.file_path).is_file()
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "生成文档不存在")
     project = db.get(Project, document.project_id)
     local_created = as_utc(document.created_at).astimezone(ZoneInfo(get_settings().display_timezone))

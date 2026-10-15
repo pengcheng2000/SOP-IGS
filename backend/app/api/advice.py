@@ -41,8 +41,7 @@ def request_advice(
     db: Session = Depends(get_db),
     user: User = Depends(require_csrf),
 ) -> dict:
-    del user
-    project = get_project_or_404(db, project_id)
+    project = get_project_or_404(db, project_id, user)
     project_payload = {
         "name": project.name,
         "description": project.description,
@@ -92,8 +91,7 @@ def latest_advice(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> dict:
-    del user
-    get_project_or_404(db, project_id)
+    get_project_or_404(db, project_id, user)
     advice = db.scalar(
         select(AIAdvice).where(AIAdvice.project_id == project_id).order_by(AIAdvice.created_at.desc())
     )

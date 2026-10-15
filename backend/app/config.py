@@ -37,16 +37,35 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_timeout_seconds: float = 10.0
     template_dir: Path = REPOSITORY_ROOT / "templates" / "liquid-cooled-cabinet" / "v1"
+    public_base_url: str | None = None
+    feishu_app_id: str | None = None
+    feishu_app_secret: str | None = Field(default=None, repr=False)
+    feishu_admin_open_ids: str = ""
+    feishu_timeout_seconds: float = 10.0
 
     @model_validator(mode="after")
     def reject_insecure_production_defaults(self) -> Settings:
+        plain_http = (self.public_base_url or "").startswith("http://")
         if self.env == "production" and (
             self.secret_key == "development-only-change-me"
             or self.bootstrap_admin_password == "admin-change-me"
-            or not self.session_cookie_secure
+            or (not self.session_cookie_secure and not plain_http)
         ):
-            raise ValueError("Production requires a unique secret, admin password, and secure cookies")
+            raise ValueError(
+                "Production requires a unique secret, admin password, and secure cookies "
+                "(or an explicit http:// SOP_PUBLIC_BASE_URL for plain-HTTP intranet access)"
+            )
+        if plain_http and self.session_cookie_secure:
+            raise ValueError("SOP_SESSION_COOKIE_SECURE must be false for an http:// public URL")
         return self
+
+    @property
+    def feishu_enabled(self) -> bool:
+        return bool(self.feishu_app_id and self.feishu_app_secret)
+
+    @property
+    def feishu_admin_open_id_set(self) -> set[str]:
+        return {item.strip() for item in self.feishu_admin_open_ids.split(",") if item.strip()}
 
     @property
     def originals_dir(self) -> Path:

@@ -2,7 +2,7 @@
 
 ## Development Stage
 
-V1 local MVP implemented for two product types (工商业柜 liquid-cooled cabinet, 升压一体机 boost-integrated unit); production hardening and business acceptance remain.
+V1 for both product types is deployed on the target Windows workstation from commit `7b572625`; cross-machine UAT, Feishu end-to-end acceptance, and boost business acceptance remain.
 
 Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
@@ -36,9 +36,9 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 * Historical photo-bearing tables are removed from the sanitized master; each test item rebuilds one bordered evidence table from its non-empty photo groups.
 * Photo completeness is tiered: explicit "at least include" evidence is required; recommended evidence needs acknowledgement; optional evidence never blocks.
 * LLM output is advisory, schema-validated, and never required for DOCX generation.
-* Production runs on a dedicated, logged-in Windows account with one Word Worker.
+* The target deployment currently runs one Word Worker in the logged-in `chengpeng3` session; moving it to a dedicated licensed interactive account remains the long-term plan.
 * Authentication: Feishu SSO via a QR code embedded on the login page (LarkSSOSDKWebQRCode from Feishu CDN, with a web-redirect fallback); identity is `open_id`; OAuth state is HMAC-signed and bound to a browser cookie (15-minute TTL). Any employee in the Feishu app's availability scope is auto-provisioned as an active `user` with no approval step. Admins can promote or disable accounts; `SOP_FEISHU_ADMIN_OPEN_IDS` auto-grants admin. Local password login remains only as the admin fallback.
-* Deployment access is plain intranet HTTP at `http://10.122.3.224:8010` (port 8000 belongs to another project): the API service binds `0.0.0.0:8010`, `SOP_PUBLIC_BASE_URL` fixes the Feishu redirect URI, and production config permits insecure cookies only when that URL is explicitly `http://`. Caddy/HTTPS is optional for later.
+* The target deployment's primary intranet address is `http://10.122.3.224:8010`: FastAPI listens on `0.0.0.0:8010`, the Domain/Private firewall profiles allow TCP 8010, `SOP_PUBLIC_BASE_URL` matches that address, and secure session cookies are disabled only for this explicit HTTP URL. PostgreSQL remains loopback-only on `127.0.0.1:5432`. Caddy remains available as a compatibility proxy to the same API but is not the advertised login entry point.
 * Projects are private to their creator (`projects.created_by`), including for admins; every project, photo-group, photo, generation and document endpoint returns 404 for other users. Admins manage accounts, not other users' projects.
 * Users change their own password from the header; a change revokes the user's other login sessions.
 
@@ -62,16 +62,21 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 * Word TOC number separators are normalized to one space after the last full field update, preserving hyperlink fields and the page-number tab.
 * Test-item selection uses only the in-header auto-save state; step navigation flushes pending debounced saves without an overlay footer.
 * Boost product end to end as a standalone module: master + manifest, workbook reader/interpreter, upload/preview/preflight/generation/download/template-approval API, own generation queue handled by the shared Word worker, standalone workspace UI. Verified with Word (continuous 5.x.y.z numbering, list restarts, merged tables, cell images, title-block fields, total page count in the text box via per-shape field update). The standard template `templates/boost-integrated-unit/v1/input-template.xlsx` is derived by `tools/build_boost_input_template.py` from the case Excel (wording wins) plus the case Word (layout of every row); generating from it matches the case Word structure item by item except for content that exists in only one of the two. A workbook with no 格式 marker is rejected with guidance to download the template. The boost Word subprocess writes to temp files (a Windows pipe holds only 4 KB) and boost validation ignores the duplicate drawing ids Word writes inside `mc:Fallback`; the cabinet path keeps its original behaviour.
+* Target deployment upgraded to commit `7b572625`: dependencies and production frontend rebuilt, four `boost_*` tables initialized without altering the three existing cabinet projects, and API/Caddy/Word Worker restarted together. The full repository suite collected 76 tests (74 passed, 2 skipped because private case workbooks are intentionally absent). HTTPS health, local admin login, both product APIs, the boost input-template download, and exact served-asset/build hashes passed.
+* A pre-upgrade backup was created at `D:\SOP-IGS-Backups\20261015-160129`; its PostgreSQL custom dump passed `pg_restore --list` validation.
+* The `SOP-IGS Daily Backup` task is registered under SYSTEM for 02:00 daily. A manual task run completed with result 0 and created `D:\SOP-IGS-Backups\20261015-165734`; its dump also passed `pg_restore --list` validation.
+* Feishu credentials are configured only in the ignored production `.env`; `/api/auth/providers` reports Feishu enabled and the QR authorization endpoint generates a login target. The external Feishu redirect/permission setup and a real scan remain to be accepted.
 
 ## Current Issues / Risks
 
-* The sanitized master still requires domain-owner review of all historical measured-data cells and project-specific paragraphs before production approval.
-* The required 100-job Word COM soak test has not yet been run on the final production machine.
-* Production PostgreSQL, backup credentials, and Word licensing are not configured in the repository; the real LLM endpoint is configured locally and verified.
-* Microsoft Word COM remains an operational risk and must stay isolated to the dedicated interactive worker account.
+* The cabinet master is approved on the target deployment, but representative business UAT should still confirm measured-data cells and project-specific paragraphs.
+* The original cabinet deployment completed a 100-job Word COM soak test; the new boost path still needs a production Word end-to-end run after business template approval.
+* Production PostgreSQL, backup credentials, and the daily SYSTEM backup task are configured locally. The real LLM endpoint is configured and verified.
+* Microsoft Word COM remains an operational risk; the Worker must stay in a logged-in interactive account and should ultimately move to a dedicated account.
+* Feishu login is enabled, but a real scan still depends on the Feishu application allowing employees and registering the exact IP-based callback. No Feishu admin open IDs are configured yet; the local admin remains the fallback.
 * The boost input spec (v1: column J 「格式」 with `+` for several items per row; column A = 三级标题, or content when a format is set and B–I are empty) is implemented and documented in the template's 填写说明 sheet, but the business has not confirmed it. The template keeps the case project's parameter values (time zone, power, IP tables) as editable examples.
 * The boost master (title-block fields, fixed chapters, reference list) needs business review and approval before production use.
 
 ## Current Focus
 
-Business review of both masters, agreeing the boost workbook spec with the user department, target-machine deployment, 100-job soak testing, and UAT.
+Business review and approval of the boost master/spec, real two-product UAT, and Feishu QR-login acceptance.

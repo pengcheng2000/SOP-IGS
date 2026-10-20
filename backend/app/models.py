@@ -229,6 +229,15 @@ class DocumentGenerationTask(Base, TimestampMixin):
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class WorkerHeartbeat(Base):
+    """Liveness signal written by the Word worker so the web UI can warn when no worker is running."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class DocumentTaskEvent(Base):
     __tablename__ = "document_task_events"
 

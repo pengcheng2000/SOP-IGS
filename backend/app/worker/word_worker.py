@@ -7,6 +7,7 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -19,7 +20,7 @@ from ..bootstrap import bootstrap
 from ..config import get_settings
 from ..db import SessionLocal
 from ..domain.catalog import BY_ID
-from ..models import DocumentGenerationTask, DocumentTaskEvent, GeneratedDocument, utcnow
+from ..models import DocumentGenerationTask, DocumentTaskEvent, GeneratedDocument, WorkerHeartbeat, utcnow
 from ..services.docx import (
     DocPhoto,
     DocPhotoGroup,
@@ -337,11 +338,34 @@ def run_task(task_id: str) -> None:
             LOGGER.exception("generation failed task=%s", task.id)
 
 
+HEARTBEAT_INTERVAL_SECONDS = 5
+
+
+def _heartbeat_loop(worker_id: str) -> None:
+    """Runs in its own thread so the signal keeps flowing while a long task blocks the main loop."""
+    while True:
+        try:
+            with SessionLocal.begin() as db:
+                now = utcnow()
+                beat = db.get(WorkerHeartbeat, worker_id)
+                if beat is None:
+                    db.add(WorkerHeartbeat(worker_id=worker_id, updated_at=now))
+                else:
+                    beat.updated_at = now
+                db.query(WorkerHeartbeat).filter(
+                    WorkerHeartbeat.updated_at < now - timedelta(days=1)
+                ).delete()
+        except Exception:
+            LOGGER.exception("worker heartbeat failed")
+        time.sleep(HEARTBEAT_INTERVAL_SECONDS)
+
+
 def main() -> None:
     bootstrap()
     bootstrap_boost()
     settings = get_settings()
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
+    threading.Thread(target=_heartbeat_loop, args=(worker_id,), daemon=True, name="heartbeat").start()
     LOGGER.info("Word worker started id=%s com=%s", worker_id, settings.word_com_enabled)
     while True:
         task_id = claim_task(worker_id)

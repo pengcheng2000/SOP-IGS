@@ -308,3 +308,29 @@ def test_projects_are_isolated_per_user_and_password_can_change(tmp_path: Path, 
         ).status_code == 401
         login(tester, "isolation-tester", "brand-new-password")
 
+
+
+def test_worker_status_reflects_heartbeat(tmp_path: Path, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    monkeypatch.setenv("SOP_DATABASE_URL", f"sqlite:///{(tmp_path / 'worker.db').as_posix()}")
+    monkeypatch.setenv("SOP_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv("SOP_BOOTSTRAP_ADMIN_PASSWORD", "test-admin-password")
+
+    config = importlib.import_module("app.config")
+    config.get_settings.cache_clear()
+    main = importlib.import_module("app.main")
+    models = importlib.import_module("app.models")
+    db_module = importlib.import_module("app.db")
+
+    with TestClient(main.app) as client:
+        assert client.get("/api/worker/status").status_code == 401
+        assert client.post("/api/auth/login", json={"username": "admin", "password": "test-admin-password"}).status_code == 200
+        assert client.get("/api/worker/status").json() == {"online": False, "last_seen": None}
+        with db_module.SessionLocal.begin() as db:
+            db.add(models.WorkerHeartbeat(worker_id="w1", updated_at=datetime.now(UTC) - timedelta(minutes=5)))
+        assert client.get("/api/worker/status").json()["online"] is False
+        with db_module.SessionLocal.begin() as db:
+            db.get(models.WorkerHeartbeat, "w1").updated_at = datetime.now(UTC)
+        status = client.get("/api/worker/status").json()
+        assert status["online"] is True and status["last_seen"]

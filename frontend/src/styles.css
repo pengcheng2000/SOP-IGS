@@ -50,6 +50,7 @@ button, input, textarea { font: inherit; }
 .ai-card .ai-accept-button:not(:disabled):hover { color: #072a26 !important; background: #99f6e4 !important; border-color: #99f6e4 !important; }
 .ai-card .ai-accept-button:disabled { color: var(--ai-muted); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); box-shadow: none; }
 .photo-sections { display: grid; gap: 18px; }
+.worker-offline-alert { margin-top: 18px; }
 .result-note { margin-top: 18px; display: grid; gap: 8px; }
 .result-note-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .photo-groups { display: grid; gap: 16px; }

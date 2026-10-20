@@ -18,7 +18,7 @@
 * Run boost UAT with real workbooks prepared from the standard template; confirm the Excel-only sections (空调, 断路器整定值, 绝缘监测装置, 电压频率检测装置, 充气柜（正泰）) are laid out as the business wants.
 * If Word automation hangs, inspect OfficePLUS for the Worker account and ask for confirmation before changing its registry `LoadBehavior`; do not change it pre-emptively.
 * Move the Worker from the current logged-in account to a dedicated, licensed interactive account for long-term unattended operation.
-* Run `alembic upgrade head` on the production PostgreSQL (0004 adds only the standalone `boost_*` tables; 0005 adds `project_test_items.result_note`; API startup also adds the column automatically).
+* Run `alembic upgrade head` on the production PostgreSQL (0004 adds only the standalone `boost_*` tables; 0005 adds `project_test_items.result_note`, 0006 adds `worker_heartbeats`; API startup also adds the column automatically).
 * After deploying, confirm on `http://10.122.3.224:8010` that photo upload shows progress/preview, and that the business is happy with the 测试结果描述 placement (before 测试结论) in a Word-finalized document; the generator test only checks the OOXML.
 
 ## Backlog

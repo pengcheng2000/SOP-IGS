@@ -25,6 +25,7 @@ from ..models import (
     ProjectTestItem,
     Template,
     User,
+    WorkerHeartbeat,
 )
 from ..schemas import GenerationRequest
 from ..services.photo_groups import ensure_project_photo_groups, group_photo_counts
@@ -150,6 +151,20 @@ def task_payload(db: Session, task: DocumentGenerationTask) -> dict:
             }
             for event in events
         ],
+    }
+
+
+WORKER_ONLINE_SECONDS = 30
+
+
+@router.get("/worker/status")
+def worker_status(db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
+    del user
+    last_seen = as_utc(db.scalar(select(func.max(WorkerHeartbeat.updated_at))))
+    age = (datetime.now(UTC) - last_seen).total_seconds() if last_seen else None
+    return {
+        "online": age is not None and age <= WORKER_ONLINE_SECONDS,
+        "last_seen": utc_iso(last_seen) if last_seen else None,
     }
 
 

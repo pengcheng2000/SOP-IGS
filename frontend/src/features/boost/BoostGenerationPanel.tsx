@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, App as AntApp, Avatar, Button, Card, Checkbox, Col, Collapse, Descriptions, List, Progress, Row, Statistic, Tag, Timeline, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { api } from "../../api";
+import WorkerStatusAlert from "../../components/WorkerStatusAlert";
 import { formatElapsed, formatLocalDateTime } from "../../time";
 import type { BoostDocumentRecord, BoostPreflight, BoostProject, BoostTask } from "./types";
 
@@ -94,6 +95,7 @@ export default function BoostGenerationPanel({ project, isAdmin }: { project: Bo
               )}
             </div>
           )}
+          <WorkerStatusAlert />
         </Card>
       </Col>
       <Col xs={24} lg={9}>

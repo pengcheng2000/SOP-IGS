@@ -22,6 +22,9 @@ from .sample_migration import upgrade_sample_scope
 from .security import hash_password
 
 COMPAT_COLUMNS = {
+    "project_test_items": {
+        "result_note": "TEXT NOT NULL DEFAULT ''",
+    },
     "photo_groups": {
         "template_group_id": "VARCHAR(160)",
         "source": "VARCHAR(20) NOT NULL DEFAULT 'custom'",

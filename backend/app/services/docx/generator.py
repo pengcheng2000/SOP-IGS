@@ -66,6 +66,7 @@ class GenerationInput:
     photos_by_test_item: dict[str, tuple[DocPhoto, ...]] = field(default_factory=dict)
     photo_groups_by_test_item: dict[str, tuple[DocPhotoGroup, ...]] = field(default_factory=dict)
     sample_photo_groups: tuple[DocPhotoGroup, ...] = ()
+    result_notes: dict[str, str] = field(default_factory=dict)
 
 
 class DocxPackage:
@@ -574,6 +575,44 @@ def _insert_temperature_curve(package: DocxPackage, group: DocPhotoGroup) -> boo
     return False
 
 
+def _section_bounds(package: DocxPackage, item_id: str) -> tuple[dict, int, etree._Element] | None:
+    """Return the item's heading record, its end index and the 测试结论 paragraph (or next heading) to insert before."""
+    records = _heading_records(package)
+    current_pos = next((i for i, record in enumerate(records) if record["item"].id == item_id), None)
+    if current_pos is None:
+        return None
+    current = records[current_pos]
+    end_index = records[current_pos + 1]["index"] if current_pos + 1 < len(records) else len(package.body) - 1
+    blocks = list(package.body)
+    anchor = blocks[end_index]
+    for candidate in blocks[current["index"] + 1 : end_index]:
+        if candidate.tag == q("w", "p") and paragraph_text(candidate).startswith("测试结论"):
+            anchor = candidate
+            break
+    return current, end_index, anchor
+
+
+def _insert_result_notes(package: DocxPackage, notes: dict[str, str]) -> int:
+    inserted = 0
+    for item in CATALOG:
+        note = (notes.get(item.id) or "").strip()
+        if not note:
+            continue
+        section = _section_bounds(package, item.id)
+        if section is None:
+            continue
+        anchor = section[2]
+        lines = [line.strip() for line in note.splitlines() if line.strip()]
+        for position, line in enumerate(lines):
+            paragraph = _paragraph(f"测试结果描述：{line}" if position == 0 else line)
+            if position == 0:
+                spacing = etree.SubElement(paragraph.find("w:pPr", NS), q("w", "spacing"))
+                spacing.set(q("w", "before"), "120")
+            anchor.addprevious(paragraph)
+        inserted += 1
+    return inserted
+
+
 def _insert_photo_groups(
     package: DocxPackage,
     groups_by_item: dict[str, tuple[DocPhotoGroup, ...]],
@@ -588,18 +627,10 @@ def _insert_photo_groups(
         groups = [group for group in groups if group.photos]
         if not groups:
             continue
-        records = _heading_records(package)
-        current_pos = next((i for i, record in enumerate(records) if record["item"].id == item.id), None)
-        if current_pos is None:
+        section = _section_bounds(package, item.id)
+        if section is None:
             continue
-        current = records[current_pos]
-        end_index = records[current_pos + 1]["index"] if current_pos + 1 < len(records) else len(package.body) - 1
-        blocks = list(package.body)
-        anchor = blocks[end_index]
-        for candidate in blocks[current["index"] + 1 : end_index]:
-            if candidate.tag == q("w", "p") and paragraph_text(candidate).startswith("测试结论"):
-                anchor = candidate
-                break
+        current, end_index, anchor = section
         insertion_index = package.body.index(anchor)
         regular_groups: list[DocPhotoGroup] = []
         for group in groups:
@@ -689,6 +720,7 @@ def generate_docx(
             for item_id, photos in request.photos_by_test_item.items()
         }
     _insert_photo_groups(package, groups_by_item, progress_callback)
+    result_note_count = _insert_result_notes(package, request.result_notes)
     package.prune_orphan_media()
     package.save(destination)
     return {
@@ -698,6 +730,7 @@ def generate_docx(
             len(group.photos) for groups in groups_by_item.values() for group in groups
         ) + sum(len(group.photos) for group in request.sample_photo_groups),
         "sample_photo_count": sum(len(group.photos) for group in request.sample_photo_groups),
+        "result_note_count": result_note_count,
         "photo_group_count": sum(
             bool(group.photos) for groups in groups_by_item.values() for group in groups
         ),

@@ -65,6 +65,10 @@ class SelectionUpdate(BaseModel):
     source: str = "manual"
 
 
+class TestResultNoteUpdate(BaseModel):
+    note: str = Field(default="", max_length=5000)
+
+
 class PhotoUpdate(BaseModel):
     caption: str | None = Field(default=None, max_length=200)
     photo_group_id: str | None = None

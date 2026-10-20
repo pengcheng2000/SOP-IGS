@@ -15,7 +15,7 @@ from ..models import (
     Template,
     User,
 )
-from ..schemas import ProjectCreate, ProjectUpdate, SelectionUpdate
+from ..schemas import ProjectCreate, ProjectUpdate, SelectionUpdate, TestResultNoteUpdate
 from ..services.photo_groups import ensure_project_photo_groups, group_photo_counts
 from ..time_utils import utc_iso
 from .deps import current_user, require_csrf
@@ -178,6 +178,43 @@ def update_selection(
         "display_numbers": display_numbers(requested) if requested else {},
         "tree": tree_payload(requested),
     }
+
+
+@router.get("/projects/{project_id}/test-result-notes")
+def list_test_result_notes(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict[str, str]:
+    get_project_or_404(db, project_id, user)
+    rows = db.execute(
+        select(ProjectTestItem.test_item_id, ProjectTestItem.result_note).where(
+            ProjectTestItem.project_id == project_id, ProjectTestItem.result_note != ""
+        )
+    ).all()
+    return {test_item_id: note for test_item_id, note in rows}
+
+
+@router.put("/projects/{project_id}/test-items/{test_item_id}/result-note")
+def update_test_result_note(
+    project_id: str,
+    test_item_id: str,
+    payload: TestResultNoteUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_csrf),
+) -> dict:
+    get_project_or_404(db, project_id, user)
+    row = db.scalar(
+        select(ProjectTestItem).where(
+            ProjectTestItem.project_id == project_id, ProjectTestItem.test_item_id == test_item_id
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "测试项目不存在")
+    row.result_note = payload.note.strip()
+    db.add(AuditEvent(actor_user_id=user.id, action="project.result_note.update", resource_type="project", resource_id=project_id, details={"test_item_id": test_item_id}))
+    db.commit()
+    return {"test_item_id": test_item_id, "note": row.result_note}
 
 
 @router.get("/projects/{project_id}/preflight")

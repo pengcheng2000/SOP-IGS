@@ -198,6 +198,7 @@ def run_task(task_id: str) -> None:
             project=snapshot["project"],
             selected_test_item_ids=tuple(snapshot["selected_test_item_ids"]),
             photos_by_test_item={key: tuple(value) for key, value in grouped.items()},
+            result_notes=dict(snapshot.get("result_notes", {})),
             photo_groups_by_test_item={
                 key: tuple(value) for key, value in photo_groups_by_item.items()
             },

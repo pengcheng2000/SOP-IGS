@@ -239,11 +239,18 @@ def test_projects_are_isolated_per_user_and_password_can_change(tmp_path: Path, 
             files={"files": ("alarm.jpg", image_bytes.getvalue(), "image/jpeg")},
             headers=admin_headers,
         ).json()[0]
+        note_url = f"/api/projects/{project['id']}/test-items/alarm_bms/result-note"
+        assert admin.put(note_url, json={"note": "  报警功能正常  "}, headers=admin_headers).json()["note"] == "报警功能正常"
+        assert admin.get(f"/api/projects/{project['id']}/test-result-notes").json() == {"alarm_bms": "报警功能正常"}
+        assert admin.put(
+            f"/api/projects/{project['id']}/test-items/no_such_item/result-note", json={"note": "x"}, headers=admin_headers
+        ).status_code == 404
         task = admin.post(
             f"/api/projects/{project['id']}/generations",
             json={"idempotency_key": "isolation-task", "allow_warnings": True},
             headers=admin_headers,
         ).json()
+        assert admin.get(f"/api/generations/{task['id']}").status_code == 200
 
         tester_headers = login(tester, "isolation-tester", "long-test-password")
         assert tester.get("/api/projects").json() == []
@@ -255,6 +262,8 @@ def test_projects_are_isolated_per_user_and_password_can_change(tmp_path: Path, 
         assert project["id"] in admin_ids and own["id"] not in admin_ids
 
         pid = project["id"]
+        assert tester.put(f"/api/projects/{pid}/test-items/alarm_bms/result-note", json={"note": "x"}, headers=tester_headers).status_code == 404
+        assert tester.get(f"/api/projects/{pid}/test-result-notes").status_code == 404
         for path in (
             f"/api/projects/{pid}",
             f"/api/projects/{pid}/preflight",

@@ -22,6 +22,7 @@ from ..models import (
     Photo,
     PhotoGroup,
     Project,
+    ProjectTestItem,
     Template,
     User,
 )
@@ -87,8 +88,19 @@ def _snapshot(db: Session, project: Project, selected: list[str]) -> dict:
         }
         for group in groups
     ]
+    result_notes = {
+        test_item_id: note
+        for test_item_id, note in db.execute(
+            select(ProjectTestItem.test_item_id, ProjectTestItem.result_note).where(
+                ProjectTestItem.project_id == project.id,
+                ProjectTestItem.test_item_id.in_(selected),
+                ProjectTestItem.result_note != "",
+            )
+        )
+    }
     return {
         "project": project_fields,
+        "result_notes": result_notes,
         "selected_test_item_ids": sorted(selected, key=lambda item_id: BY_ID[item_id].order),
         "photos": [photo for photo in photos if photo["test_item_id"] is not None],
         "photo_groups": [group for group in photo_groups if group["scope"] == "test_item"],

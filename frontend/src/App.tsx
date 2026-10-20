@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, setCsrfToken } from "./api";
 import BrandLogo from "./components/BrandLogo";
 import FeishuQrLogin from "./components/FeishuQrLogin";
+import TestPeriodInput from "./components/TestPeriodInput";
 import BoostProjectCard from "./features/boost/BoostProjectCard";
 import BoostWorkspace, { useBoostConfig } from "./features/boost/BoostWorkspace";
 import type { BoostProject } from "./features/boost/types";
@@ -224,7 +225,7 @@ function BasicInfo({ project, onSaved }: { project: Project; onSaved: (project: 
           <Col xs={24} md={8}><Form.Item name="document_number" label="文档编号"><Input /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="document_version" label="版本"><Input /></Form.Item></Col>
           <Col xs={24} md={8}><Form.Item name="product_phase" label="产品阶段"><Input /></Form.Item></Col>
-          <Col xs={24} md={12}><Form.Item name="test_period" label="测试时间"><Input placeholder="2026-09-01 至 2026-09-05" /></Form.Item></Col>
+          <Col xs={24} md={12}><Form.Item name="test_period" label="测试时间"><TestPeriodInput /></Form.Item></Col>
           <Col xs={24} md={12}><Form.Item name="test_location" label="测试地点"><Input /></Form.Item></Col>
           <Col xs={24} md={12}><Form.Item name="testers" label="测试人员"><Input /></Form.Item></Col>
           <Col xs={24} md={6}><Form.Item name="product_model" label="产品型号"><Input /></Form.Item></Col>

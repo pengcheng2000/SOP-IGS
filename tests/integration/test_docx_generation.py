@@ -250,3 +250,19 @@ def test_existing_test_photo_heading_reused_and_custom_titles_preserved(tmp_path
     assert headings[0].getnext().tag.endswith('}tbl')
     assert not root.xpath('//w:tbl//w:t[text()="测试照片"]', namespaces=NS)
     assert root.xpath('//w:tbl//w:t[text()="补充证据"]', namespaces=NS)
+
+
+def test_result_note_is_inserted_before_conclusion_with_or_without_photos(tmp_path):
+    out = tmp_path / 'note.docx'
+    report = generate_docx(MASTER, out, GenerationInput(
+        project={'name': '结果描述'}, selected_test_item_ids=('cabinet_strength_static', 'cabinet_strength_lifting'),
+        result_notes={'cabinet_strength_static': '静置 24 h，无变形。\n第二行补充说明'},
+    ))
+    assert report['result_note_count'] == 1
+    assert validate_docx(out)['valid']
+    root = document_xml(out)
+    note = root.xpath('//w:p[starts-with(normalize-space(.), "测试结果描述：静置 24 h")]', namespaces=NS)
+    assert len(note) == 1
+    assert ''.join(note[0].getnext().xpath('.//w:t/text()', namespaces=NS)) == '第二行补充说明'
+    assert ''.join(note[0].getnext().getnext().xpath('.//w:t/text()', namespaces=NS)).startswith('测试结论')
+    assert texts(out).count('测试结果描述：') == 1

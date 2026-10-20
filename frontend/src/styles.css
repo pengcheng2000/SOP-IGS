@@ -50,6 +50,8 @@ button, input, textarea { font: inherit; }
 .ai-card .ai-accept-button:not(:disabled):hover { color: #072a26 !important; background: #99f6e4 !important; border-color: #99f6e4 !important; }
 .ai-card .ai-accept-button:disabled { color: var(--ai-muted); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); box-shadow: none; }
 .photo-sections { display: grid; gap: 18px; }
+.result-note { margin-top: 18px; display: grid; gap: 8px; }
+.result-note-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .photo-groups { display: grid; gap: 16px; }
 .photo-group-card { border: 1px solid #dce5e2; border-radius: 14px; padding: 16px; transition: border-color .2s, box-shadow .2s, background .2s; }
 .photo-group-card.drop-target { border-color: #0f766e; background: #f0faf7; box-shadow: 0 0 0 3px rgba(15,118,110,.12); }

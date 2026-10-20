@@ -153,6 +153,7 @@ class ProjectTestItem(Base, TimestampMixin):
     test_item_id: Mapped[str] = mapped_column(ForeignKey("test_items.id"), index=True)
     selected: Mapped[bool] = mapped_column(Boolean, default=False)
     selection_source: Mapped[str] = mapped_column(String(30), default="manual")
+    result_note: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class PhotoGroup(Base, TimestampMixin):

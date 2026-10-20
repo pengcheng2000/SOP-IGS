@@ -41,6 +41,8 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 * The target deployment's primary intranet address is `http://10.122.3.224:8010`: FastAPI listens on `0.0.0.0:8010`, the Domain/Private firewall profiles allow TCP 8010, `SOP_PUBLIC_BASE_URL` matches that address, and secure session cookies are disabled only for this explicit HTTP URL. PostgreSQL remains loopback-only on `127.0.0.1:5432`. Caddy remains available as a compatibility proxy to the same API but is not the advertised login entry point.
 * Projects are private to their creator (`projects.created_by`), including for admins; every project, photo-group, photo, generation and document endpoint returns 404 for other users. Admins manage accounts, not other users' projects.
 * Users change their own password from the header; a change revokes the user's other login sessions.
+* The SPA is served over plain HTTP on an intranet IP, which is not a secure context: browser APIs that require one (`crypto.randomUUID`, `crypto.subtle`, `navigator.clipboard`) must not be used in `frontend/src`; client-side ids use a counter. Upload start-up and failures are shown per file in the photo step.
+* Cabinet test items have an optional 测试结果描述 text (`project_test_items.result_note`, ≤5000 chars, auto-saved, API `GET /projects/{id}/test-result-notes`, `PUT /projects/{id}/test-items/{item}/result-note`, no revision bump). It is copied into the generation snapshot (`result_notes`) and written as paragraphs "测试结果描述：…" directly before the item's 测试结论 paragraph, with or without photos. The 基础信息 测试时间 field stays free text (`YYYY-MM-DD 至 YYYY-MM-DD`) with a date-range picker button. Boost projects are unaffected.
 
 ## Completed Major Modules
 

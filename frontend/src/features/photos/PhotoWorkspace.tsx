@@ -10,12 +10,14 @@ import { DndContext, PointerSensor, useDroppable, useSensor, useSensors, type Dr
 import { SortableContext, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { App as AntApp, Button, Card, Empty, Input, Modal, Progress, Space, Tag, Typography } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, uploadWithProgress } from "../../api";
 import type { Photo, PhotoGroup, Project, TreeItem } from "../../types";
 import SortablePhoto from "./SortablePhoto";
 
 const { Title, Text } = Typography;
+
+let uploadSeq = 0;
 
 type UploadProgress = {
   id: string;
@@ -30,6 +32,65 @@ const requirementLabels = {
   recommended: { color: "warning", text: "推荐" },
   optional: { color: "default", text: "可选" }
 } as const;
+
+function ResultNoteBox({ projectId, itemId, saved }: { projectId: string; itemId: string; saved: string }) {
+  const { message } = AntApp.useApp();
+  const queryClient = useQueryClient();
+  const [value, setValue] = useState(saved);
+  const [state, setState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const lastSaved = useRef(saved);
+  const latest = useRef(saved);
+  const timer = useRef<number>(undefined);
+
+  async function save() {
+    window.clearTimeout(timer.current);
+    const note = latest.current;
+    if (note === lastSaved.current) return;
+    setState("saving");
+    try {
+      const result = await api<{ note: string }>(`/api/projects/${projectId}/test-items/${itemId}/result-note`, {
+        method: "PUT",
+        body: JSON.stringify({ note })
+      });
+      lastSaved.current = note;
+      setState(latest.current === note ? "saved" : "idle");
+      queryClient.setQueryData<Record<string, string>>(["test-result-notes", projectId], (current) => ({ ...current, [itemId]: result.note }));
+    } catch (error) {
+      setState("failed");
+      message.error(error instanceof Error ? `测试结果保存失败：${error.message}` : "测试结果保存失败");
+    }
+  }
+  const flush = useRef(save);
+  flush.current = save;
+  // Persist a pending edit when the user leaves the step before the debounce fires.
+  useEffect(() => () => { void flush.current(); }, []);
+
+  return (
+    <div className="result-note">
+      <div className="result-note-head">
+        <Text strong>测试结果描述</Text>
+        <Text type={state === "failed" ? "danger" : "secondary"}>
+          {state === "saving" ? "保存中…" : state === "saved" ? "已保存" : state === "failed" ? "保存失败，请重试" : "选填，将写入 Word 的该测试项下"}
+        </Text>
+      </div>
+      <Input.TextArea
+        value={value}
+        maxLength={5000}
+        showCount
+        autoSize={{ minRows: 3, maxRows: 12 }}
+        placeholder="描述该测试项的测试结果，例如：测试过程、现象、数据结论（可换行分段）"
+        onChange={(event) => {
+          setValue(event.target.value);
+          latest.current = event.target.value;
+          setState("idle");
+          window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => void flush.current(), 800);
+        }}
+        onBlur={() => void save()}
+      />
+    </div>
+  );
+}
 
 function PhotoGroupCard({
   group,
@@ -146,6 +207,10 @@ export default function PhotoWorkspace({
     queryKey: ["photos", project.id],
     queryFn: () => api<Photo[]>(`/api/projects/${project.id}/photos`)
   });
+  const notesQuery = useQuery({
+    queryKey: ["test-result-notes", project.id],
+    queryFn: () => api<Record<string, string>>(`/api/projects/${project.id}/test-result-notes`)
+  });
   const groups = groupsQuery.data ?? [];
   const photos = photosQuery.data ?? [];
   const photosByGroup = useMemo(() => {
@@ -166,12 +231,13 @@ export default function PhotoWorkspace({
   }
 
   async function uploadOne(group: PhotoGroup, file: File) {
-    const id = `${group.id}:${file.name}:${file.lastModified}:${crypto.randomUUID()}`;
-    setUploads((current) => ({ ...current, [id]: { id, name: file.name, percent: 0, stage: "uploading" } }));
-    const data = new FormData();
-    data.set("photo_group_id", group.id);
-    data.append("files", file);
+    // crypto.randomUUID() needs a secure context, so it is unavailable on plain-HTTP intranet addresses.
+    const id = `${group.id}:${file.name}:${file.lastModified}:${uploadSeq++}`;
     try {
+      setUploads((current) => ({ ...current, [id]: { id, name: file.name, percent: 0, stage: "uploading" } }));
+      const data = new FormData();
+      data.set("photo_group_id", group.id);
+      data.append("files", file);
       const result = await uploadWithProgress<Photo[]>(
         `/api/projects/${project.id}/photos`,
         data,
@@ -181,7 +247,8 @@ export default function PhotoWorkspace({
       if (failure) throw new Error(failure.error_detail || failure.error_code || "图片处理失败");
       setUploads((current) => { const next = { ...current }; delete next[id]; return next; });
     } catch (error) {
-      setUploads((current) => ({ ...current, [id]: { ...current[id], percent: 100, stage: "failed", error: error instanceof Error ? error.message : "上传失败" } }));
+      const reason = error instanceof Error ? error.message : "上传失败";
+      setUploads((current) => ({ ...current, [id]: { id, name: file.name, percent: 100, stage: "failed", error: `上传失败：${reason}` } }));
     }
   }
 
@@ -195,7 +262,11 @@ export default function PhotoWorkspace({
       }
     });
     await Promise.all(workers);
-    await refresh();
+    try {
+      await refresh();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "刷新照片列表失败");
+    }
   }
 
   async function dragEnd(event: DragEndEvent) {
@@ -313,6 +384,7 @@ export default function PhotoWorkspace({
                   />
                 ))}
               </div>
+              {notesQuery.isSuccess && <ResultNoteBox projectId={project.id} itemId={item.id} saved={notesQuery.data[item.id] ?? ""} />}
             </Card>
           );
         })}

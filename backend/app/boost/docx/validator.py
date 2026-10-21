@@ -45,6 +45,9 @@ def validate_boost_docx(path: Path, allowed_floating_drawings: int) -> dict:
             issues.append("MISSING_DOCUMENT_XML")
         else:
             drawing_ids = document.xpath("//wp:docPr[not(ancestor::mc:Fallback)]/@id", namespaces=VALIDATION_NS)
+            for name, root in parsed.items():  # ids are shared by the body, headers and footers
+                if name.startswith(("word/header", "word/footer")):
+                    drawing_ids += root.xpath("//wp:docPr[not(ancestor::mc:Fallback)]/@id", namespaces=VALIDATION_NS)
             drawings = len(document.xpath("//w:drawing", namespaces=NS))
             anchors = len(document.xpath("//wp:anchor", namespaces=NS))
             if len(drawing_ids) != len(set(drawing_ids)):

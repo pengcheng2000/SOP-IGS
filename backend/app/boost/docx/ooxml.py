@@ -53,6 +53,22 @@ class DocxPackage:
             [int(value) for value in self.document.xpath("//wp:docPr/@id", namespaces=NS) if value.isdigit()]
             or [0]
         )
+        self._renumber_header_footer_drawings()
+
+    def _renumber_header_footer_drawings(self) -> None:
+        """Drawing ids are unique across the body and every header/footer; the case document reused them
+        (body and header both had 1 and 2), which makes Word report the file as corrupt."""
+        for name in sorted(self.entries):
+            if not re.fullmatch(r"word/(header|footer)\d*\.xml", name):
+                continue
+            part = self.part(name)
+            fresh: dict[str, str] = {}
+            for node in part.xpath("//wp:docPr", namespaces=NS):  # an mc:Fallback twin keeps its Choice id
+                old = node.get("id", "")
+                if old not in fresh:
+                    fresh[old] = str(self.next_drawing_id())
+                node.set("id", fresh[old])
+        # Generated drawings continue after every id already used in any part.
 
     @property
     def body(self) -> etree._Element:

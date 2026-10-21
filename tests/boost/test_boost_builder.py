@@ -147,6 +147,26 @@ def test_jpeg_images_get_a_single_valid_content_type(tmp_path: Path) -> None:
     assert all("/." not in value for value in defaults.values())
 
 
+def test_drawing_ids_are_unique_across_body_and_headers(tmp_path: Path) -> None:
+    """The case master reused ids between body and headers; generated images must not collide with them either."""
+    with pytest.raises(Exception, match="DUPLICATE_DRAWING_ID"):
+        validate_boost_docx(MASTER, 2)
+    images = tuple(Image(make_image(tmp_path / f"fig{n}.png", (300, 200)), f"外观检查!A{n}") for n in range(1, 13))
+    document = BoostDocument(chapters=(Chapter("外观检查", "外观检查", (Heading(3, "照片"), *images)),),
+                             revision_history=("2026年10月，A0。",))
+    output = tmp_path / "many.docx"
+    generate_boost_docx(MASTER, output, FIELDS, document)
+    assert validate_boost_docx(output, 2)["valid"]
+    with ZipFile(output) as archive:
+        ids = []
+        for name in archive.namelist():
+            if name.startswith(("word/document", "word/header", "word/footer")) and name.endswith(".xml"):
+                root = etree.fromstring(archive.read(name))
+                ids += root.xpath("//wp:docPr[not(ancestor::mc:Fallback)]/@id",
+                                  namespaces={**NS, "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006"})
+    assert len(ids) == len(set(ids)) >= 12
+
+
 def test_lists_restart_with_their_own_numbering(tmp_path: Path) -> None:
     output = tmp_path / "boost.docx"
     generate_boost_docx(MASTER, output, FIELDS, sample_document(tmp_path))

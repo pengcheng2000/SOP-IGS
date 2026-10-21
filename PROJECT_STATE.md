@@ -77,6 +77,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
 ## Current Issues / Risks
 
+* Template approval is decided in development and shipped in each `manifest.yaml` as `approved_master_sha256` (the business-reviewed master hash); bootstrap marks the template approved while the master hash matches, and falls back to `review_required` when the master changes until the manifest hash is updated after a new review. Deployments need no approval step. Representative business UAT should still confirm measured-data cells and project-specific paragraphs.
 * The original cabinet deployment completed a 100-job Word COM soak test; the newly approved boost path still needs a production Word end-to-end UAT run.
 * Two earlier cabinet task snapshots reference four photos deleted while the Worker was offline; these failed tasks were not rewritten or silently requeued. Existing photo rows were checked for original/processed file integrity during incident repair.
 * Production PostgreSQL, backup credentials, and the daily SYSTEM backup task are configured locally. The real LLM endpoint is configured and verified.

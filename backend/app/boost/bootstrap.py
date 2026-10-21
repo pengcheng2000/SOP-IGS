@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from ..db import Base, SessionLocal, engine
 from ..models import Template
+from ..services.template_approval import apply_manifest_approval
 from .models import BOOST_TABLES
 from .settings import get_boost_settings, load_manifest
 
@@ -32,15 +33,17 @@ def bootstrap_boost() -> None:
             select(Template).where(Template.key == manifest["template_key"], Template.version == manifest["version"])
         )
         if template is None:
-            session.add(Template(
+            template = Template(
                 key=manifest["template_key"],
                 version=manifest["version"],
                 source_sha256=manifest["source_sha256"],
                 master_sha256=manifest["master_sha256"],
                 manifest_version=manifest["manifest_version"],
                 status="review_required",
-            ))
+            )
+            session.add(template)
         else:
             template.source_sha256 = manifest["source_sha256"]
             template.master_sha256 = manifest["master_sha256"]
             template.manifest_version = manifest["manifest_version"]
+        apply_manifest_approval(template, manifest, manifest["master_sha256"])

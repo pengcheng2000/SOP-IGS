@@ -131,6 +131,22 @@ def test_generate_boost_document(tmp_path: Path) -> None:
     assert note.startswith("★")
 
 
+def test_jpeg_images_get_a_single_valid_content_type(tmp_path: Path) -> None:
+    """The master declares JPG as `image/.jpg`; Word reports a corrupt file if a JPEG image keeps that."""
+    picture = tmp_path / "photo.jpg"
+    PILImage.new("RGB", (300, 200), (200, 30, 30)).save(picture, format="JPEG")
+    ref = ImageRef(id="photo", path=str(picture), sha256="0" * 64, px_w=300, px_h=200)
+    document = BoostDocument(chapters=(Chapter("外观检查", "外观检查", (Heading(3, "照片"), Image(ref, "外观检查!A1"))),),
+                             revision_history=("2026年10月，A0。",))
+    output = tmp_path / "jpeg.docx"
+    generate_boost_docx(MASTER, output, FIELDS, document)
+    types = read_part(output, "[Content_Types].xml")
+    defaults = {node.get("Extension"): node.get("ContentType") for node in types if node.tag.endswith("Default")}
+    assert defaults["jpg"] == "image/jpeg" and defaults["jpeg"] == "image/jpeg"
+    assert len({key.lower() for key in defaults}) == len(defaults)
+    assert all("/." not in value for value in defaults.values())
+
+
 def test_lists_restart_with_their_own_numbering(tmp_path: Path) -> None:
     output = tmp_path / "boost.docx"
     generate_boost_docx(MASTER, output, FIELDS, sample_document(tmp_path))

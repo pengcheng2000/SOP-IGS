@@ -20,6 +20,7 @@ from .models import (
 )
 from .sample_migration import upgrade_sample_scope
 from .security import hash_password
+from .services.template_approval import apply_manifest_approval
 
 COMPAT_COLUMNS = {
     "project_test_items": {
@@ -105,6 +106,7 @@ def bootstrap() -> None:
             template.source_sha256 = manifest["source_sha256"]
             template.master_sha256 = manifest["master_sha256"]
             template.manifest_version = manifest["manifest_version"]
+        apply_manifest_approval(template, manifest, actual_hash)
         for item in CATALOG:
             section = session.get(TemplateSection, item.id)
             if section is None:

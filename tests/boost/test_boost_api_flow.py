@@ -21,7 +21,7 @@ def test_boost_project_flow(tmp_path: Path, monkeypatch):
         headers = {"X-CSRF-Token": login.json()["csrf_token"]}
 
         boost_config = client.get("/api/boost/config").json()
-        assert boost_config["available"] and boost_config["template_status"] == "review_required"
+        assert boost_config["available"] and boost_config["template_status"] == "approved"
         assert {field["key"] for field in boost_config["fields"]} >= {"project_name", "document_number", "drafter"}
         assert boost_config["input_template_available"]
         template = client.get("/api/boost/input-template")

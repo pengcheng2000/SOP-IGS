@@ -106,8 +106,12 @@ New-NetFirewallRule -DisplayName "SOP-IGS 8010" -Direction Inbound -Protocol TCP
    登录时自动成为管理员。
 6. 本地 `admin` 账号保留为应急登录方式，入口是登录页底部的「管理员账号登录」。
 
-业务确认净化后的 `master.docx` 后，由管理员调用
-`POST /api/admin/templates/{template_id}/approve`。生产环境会拒绝使用未批准母版生成文档。
+### 母版批准
+
+母版是否通过业务复核在开发机决定，并随代码提交：各产品 `manifest.yaml` 里的 `approved_master_sha256`
+是已复核母版的哈希，启动时与实际 `master.docx` 一致就自动标记为 approved。部署机不需要任何批准操作；
+母版一旦改动，哈希不一致，生产环境会拒绝生成，需要在开发机重新复核并更新该哈希后再发布。
+
 
 ## 5. 上线检查
 

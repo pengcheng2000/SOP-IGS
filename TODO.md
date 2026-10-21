@@ -3,6 +3,7 @@
 ## Doing
 
 * Review the boost 测试项分类表 spec and `input-template.xlsx` with the user department (format values, A-column rule, `+` multi-item rows, image placement); changes go into `backend/app/boost/input/interpreter.py` (bump `PARSER_VERSION`) and `tools/build_boost_input_template.py`. The template still contains the case project's parameter values as examples.
+* After any future master change, re-review it and update `approved_master_sha256` in that template's `manifest.yaml` (deployments then need nothing).
 * Complete cross-machine browser UAT for both product choices through `http://10.122.3.224:8010`.
 
 ## Next

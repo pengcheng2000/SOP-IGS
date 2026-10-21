@@ -3,6 +3,8 @@ version: '1'
 manifest_version: '1'
 source_sha256: 7ab29ad1a7f8cb345a1d3ce0f261fbd614d0f5b59cf3111a7b438db2995737d1
 master_sha256: 43996b5ba31032e1cf4291a3bcf860945df5aaf88bf21f864bebd567a410cb75
+# Business-reviewed master (see services/template_approval.py); update only after a new review.
+approved_master_sha256: 43996b5ba31032e1cf4291a3bcf860945df5aaf88bf21f864bebd567a410cb75
 anchors:
   chapters: '{{BOOST_CHAPTERS}}'
   revision_history: '{{REVISION_HISTORY}}'

@@ -3,6 +3,8 @@ version: "1"
 manifest_version: "3"
 source_sha256: 33806c9949a23a397c6d3d039659c6b6823914048c3e2b7c592b0750ecb0d756
 master_sha256: e06985520105b6ad0ca05d3dc53a094625f80664fa9625342fa6115817356251
+# Business-reviewed master (see services/template_approval.py); update only after a new review.
+approved_master_sha256: e06985520105b6ad0ca05d3dc53a094625f80664fa9625342fa6115817356251
 test_root:
   title: 测试项目
   num_id: 2

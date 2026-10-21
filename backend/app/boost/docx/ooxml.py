@@ -27,6 +27,9 @@ def paragraph_text(element: etree._Element) -> str:
     return "".join(element.xpath(".//w:t/text()", namespaces=NS)).strip()
 
 
+IMAGE_CONTENT_TYPES = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}
+
+
 class DocxGenerationError(RuntimeError):
     def __init__(self, code: str, message: str):
         super().__init__(message)
@@ -40,6 +43,7 @@ class DocxPackage:
         self.document = etree.fromstring(self.entries["word/document.xml"])
         self.relationships = etree.fromstring(self.entries["word/_rels/document.xml.rels"])
         self.content_types = etree.fromstring(self.entries["[Content_Types].xml"])
+        self._normalize_image_content_types()
         self._parts: dict[str, etree._Element] = {}
         self._rid = max(
             [int(match.group(1)) for rel in self.relationships for match in [re.fullmatch(r"rId(\d+)", rel.get("Id", ""))] if match]
@@ -108,14 +112,29 @@ class DocxPackage:
         self._drawing_id += 1
         return self._drawing_id
 
+    def _normalize_image_content_types(self) -> None:
+        """Make the image defaults correct: the case document declared JPG as `image/.jpg`, and extensions are
+        case-insensitive, so a lower-case `jpg` default added later would duplicate it and Word reports corruption."""
+        seen: set[str] = set()
+        for node in list(self.content_types.findall(q("ct", "Default"))):
+            extension = node.get("Extension", "").lower()
+            if extension not in IMAGE_CONTENT_TYPES:
+                continue
+            if extension in seen:
+                self.content_types.remove(node)
+                continue
+            seen.add(extension)
+            node.set("Extension", extension)
+            node.set("ContentType", IMAGE_CONTENT_TYPES[extension])
+
     def _ensure_content_type(self, extension: str) -> None:
-        normalized = extension.removeprefix(".")
-        values = self.content_types.xpath("./ct:Default/@Extension", namespaces=NS)
-        if normalized in values or (normalized == "jpg" and "jpeg" in values):
+        normalized = extension.removeprefix(".").lower()
+        values = {value.lower() for value in self.content_types.xpath("./ct:Default/@Extension", namespaces=NS)}
+        if normalized in values:
             return
         node = etree.SubElement(self.content_types, q("ct", "Default"))
         node.set("Extension", normalized)
-        node.set("ContentType", "image/png" if normalized == "png" else "image/jpeg")
+        node.set("ContentType", IMAGE_CONTENT_TYPES[normalized])
 
     def prune_orphan_media(self) -> None:
         used = set(self.document.xpath("//a:blip/@r:embed", namespaces=NS))

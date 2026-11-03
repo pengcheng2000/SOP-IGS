@@ -2,7 +2,7 @@
 
 ## Development Stage
 
-Production remains at `f0023ef` (cabinet reports and boost plans), with its two deployed masters approved. The rebuilt boost home master was approved for release by the user’s production-publish instruction on 2026-11-03; its current approved hash is committed in the manifest. The local working tree now also implements cabinet test plans and two-level business/document project creation; this release is not deployed, and its new master awaits business review. Cross-machine UAT and Feishu end-to-end acceptance remain.
+Production remains at `f0023ef` (cabinet reports and boost plans), with its two deployed masters approved. The rebuilt boost home master was approved for release by the user’s production-publish instruction on 2026-11-03; its current approved hash is committed in the manifest. The local working tree now also implements cabinet test plans and two-level business/document project creation; this release is not deployed. The user explicitly requested all template release approvals be completed on this development computer on 2026-11-03; all three current master hashes are now pinned as approved in their manifests. Cross-machine UAT and Feishu end-to-end acceptance remain.
 
 Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
@@ -25,6 +25,8 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 * PostgreSQL, Caddy, Windows Task Scheduler/WinSW for production.
 
 ## Confirmed Decisions
+
+* All template release verification and approval must be completed on the development computer before publishing. The user explicitly requires the production computer to deploy directly without another template review or manual approval. All three current master hashes are approved in their individual manifests.
 
 * Project creation is a sequential three-screen dialog: click a business card, then click a report/plan card, then enter project details. Business and document choices are never shown as simultaneous selectors. Both businesses always enter the document step; unsupported boost reports stay disabled there. Back navigation preserves draft fields, while closing/reopening resets the flow.
 
@@ -60,7 +62,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 ## Completed Major Modules
 
 * Local cabinet-plan implementation complete: annotated public template, private source-preserving annotated workbook, independent case-derived master, immutable source/preview API, metadata provenance and missing-field UI, generation queue/downloads, two-layer creation UI, startup schema plus migration 0007, and updated backup coverage. Private cases stay in `SOP_case/`; field map and content checklist are in `templates/cabinet-test-plan/v1/README.md` and the workbook.
-* Validation: the last full suite passed 98 pytest tests; all 13 cabinet-plan tests and six native Word cases pass, including explicit level-4 headings, content parity, and no orphan headings; frontend production build passes; Edge headless smoke passes all three creation routes, real file upload, metadata editing, enqueue and 390px mobile dialog with no page errors. Real Word full (22 pages with restored indentation), reduced/reordered (8), long-title (8), and both large and footer-boundary home-overflow cases pass their expected checks. The title block stays on page 1; valid summary/body pages remain 2/3. One- and two-digit list text positions were checked in the rendered output. A queued job also passed the actual worker subprocess, reopen, page checks and authenticated download SHA256 verification. Artifacts are under ignored `tests/output/cabinet-plan/`.
+* Validation: the last full suite passed 99 pytest tests; all 13 cabinet-plan tests and six native Word cases pass, including explicit level-4 headings, content parity, and no orphan headings; frontend production build passes; Edge headless smoke passes all three creation routes, real file upload, metadata editing, enqueue and 390px mobile dialog with no page errors. Real Word full (22 pages with restored indentation), reduced/reordered (8), long-title (8), and both large and footer-boundary home-overflow cases pass their expected checks. The title block stays on page 1; valid summary/body pages remain 2/3. One- and two-digit list text positions were checked in the rendered output. A queued job also passed the actual worker subprocess, reopen, page checks and authenticated download SHA256 verification. Artifacts are under ignored `tests/output/cabinet-plan/`.
 
 
 * Versioned source and sanitized master template with manifest and cleaning rules.
@@ -91,7 +93,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
 ## Current Issues / Risks
 
-* `cabinet-test-plan` v1 is deliberately `review_required`; review its standard workbook, engineering-content checklist and generated Word before setting `approved_master_sha256` and deploying. Existing two template approvals are unchanged. The new source/API build has not been deployed to production.
+* All three current masters are approved in their own manifests, including cabinet-test-plan `189b649afb32`. Production deployment requires no template review or manual approval. Each project still edits the workbook parameters and applicable alternatives; the 内容核对 sheet documents inherited example-value concerns without changing engineering text automatically. The new release has not been deployed to production.
 * The backup example now includes `processed`, `boost` and `cabinet_plan`; copy this coverage into the actual deployment backup job during rollout. Bootstrap-managed production should receive the additive tables on API/worker startup, not the entire Alembic chain.
 
 
@@ -112,10 +114,15 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
 ## Boost Home Update Validation
 
-* Release verification: 98 pytest tests passed with two skips; targeted boost/home/API/template-approval tests also pass after the final updates. Frontend production build and changed-code Ruff checks pass. Native Word produced a 25-page sample, reopened successfully, and matched all 5.x headings. Actual PCS, sampling-line and polarity numbers are 1)/2); revision history has outline level 1 in COM, with inherited heading pagination flags explicitly disabled to remove the margin formatting square. A separate 12-item native Word probe verifies two-digit numbering. Rendered pages were inspected for title duplication, table weight, alignment and gaps.
+* Release verification: 99 pytest tests passed with two skips; targeted boost/home/API/template-approval tests also pass after the final updates. Frontend production build and changed-code Ruff checks pass. Native Word produced a 25-page sample, reopened successfully, and matched all 5.x headings. Actual PCS, sampling-line and polarity numbers are 1)/2); revision history has outline level 1 in COM, with inherited heading pagination flags explicitly disabled to remove the margin formatting square. A separate 12-item native Word probe verifies two-digit numbering. Rendered pages were inspected for title duplication, table weight, alignment and gaps.
 * Review artifacts: `tests/output/boost-home/boost-home.docx`, `boost-home.pdf`, `sample.xlsx`, `audit.json`, `two-digit.pdf`; reproduce with `tools/verify_boost_home.py`. Source workbook is preserved privately in `SOP_case/升压一体机测试方案案例/升压一体机测试项分类表-用户优化源模板.xlsx`. Template rebuild uses `tools/build_boost_input_template.py --source <xlsx>`; its default is an idempotent update of the committed standard.
 * Local boost master/registry hash is `f4dd219c3196`, release status `approved`; the manifest pins approved_master_sha256 to this exact release hash following the user’s production-publish instruction. Registry lookup and bootstrap both revoke approval on hash changes. Local API/Word worker were refreshed; SQLite recovery backup is `runtime/repair-backups/boost-home-20261103-104708/sop-igs.db`. Production was not changed.
 
+## All-Template Release Approval
+
+* On 2026-11-03 all three shipped masters were hash-verified and their local registry states checked as approved. The release test now requires an exact approved_master_sha256 match for every workflow (cabinet report, boost plan, cabinet plan); a shipped pending template can no longer pass that release check.
+* Current regression: 99 tests passed, 2 skipped. Cabinet-plan native Word matrix passed all six cases (full 22 pages, reduced/reordered 8, long title 8, explicit heading levels 3, and both expected-overflow cases). The full case preserved all 1064 input paragraphs with zero extra/missing; all cases reopened, had no orphan headings, and kept the title block on page 1. Evidence: tests/output/cabinet-plan/word-acceptance.json. Deployment instructions now require all three workflow statuses to be approved automatically, with no production-side review.
+
 ## Current Focus
 
-The validated 2026-11-03 release is prepared for GitHub main and production-computer deployment. Boost is approved for production; cabinet-plan still awaits business review and stays review_required. Production rollout remains a separate action on the target computer. Continue cross-machine UAT, boost workbook-spec acceptance and Feishu QR-login acceptance.
+The validated 2026-11-03 release is prepared for GitHub main and production-computer deployment. All three workflow masters are approved for production; production only pulls code, backs up, builds, restarts and verifies the release. Production rollout remains a separate action on the target computer. Continue cross-machine UAT, boost workbook-spec acceptance and Feishu QR-login acceptance.

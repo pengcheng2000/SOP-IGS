@@ -348,6 +348,7 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
         headers = {"X-CSRF-Token": login.json()["csrf_token"]}
         base = "/api/cabinet-plans"
         assert client.get(base + "/config").json()["available"]
+        assert client.get(base + "/config").json()["template_status"] == "approved"
         assert client.get(base + "/input-template").content[:2] == b"PK"
         p = client.post(base + "/projects", json={}, headers=headers).json()
         url = f"{base}/projects/{p['id']}"
@@ -417,7 +418,7 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
             template.status = "approved"
         current_config = client.get(base + "/config").json()
         assert current_config["available"]
-        assert current_config["template_status"] == "review_required"
+        assert current_config["template_status"] == "approved"
         task = client.post(
             url + "/generations",
             json={"idempotency_key": "cabinet-task-original", "allow_warnings": True},
@@ -428,7 +429,7 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
         actual_hash = hashlib.sha256(MASTER.read_bytes()).hexdigest()
         with SessionLocal() as db:
             assert db.get(Template, template_id).master_sha256 == actual_hash
-            assert db.get(Template, template_id).status == "review_required"
+            assert db.get(Template, template_id).status == "approved"
             assert (
                 db.get(CabinetPlanGenerationTask, task_id).input_snapshot[
                     "master_sha256"

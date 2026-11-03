@@ -146,7 +146,43 @@ def field(p, instruction):
 def margin_label(
     document, contains: str, *, name: str, left: float, top: float, filename=False
 ):
-    """Copy the case's rotated text box, pinning both OOXML representations to paper."""
+    """Build a portable copyright box; preserve the case filename box on page one."""
+    if not filename:
+        # A header must not inherit the case's Office/WPS AlternateContent
+        # textbox. Some production Word builds reject that compound shape.
+        # A self-contained VML rectangle needs no external shapetype or image.
+        v = "urn:schemas-microsoft-com:vml"
+        o = "urn:schemas-microsoft-com:office:office"
+        pict = E.Element(q("w", "pict"), nsmap={"v": v, "o": o})
+        shape = E.SubElement(pict, "{" + v + "}rect")
+        shape.set("id", name)
+        shape.set(
+            "style",
+            f"position:absolute;margin-left:{left}pt;margin-top:{top}pt;"
+            "width:56.55pt;height:104.25pt;rotation:180;v-text-anchor:middle;"
+            "mso-position-horizontal-relative:page;mso-position-vertical-relative:page",
+        )
+        shape.set("filled", "f")
+        shape.set("stroked", "f")
+        shape.set("{" + o + "}allowincell", "f")
+        textbox = E.SubElement(shape, "{" + v + "}textbox")
+        textbox.set("style", "layout-flow:vertical")
+        content = E.SubElement(textbox, q("w", "txbxContent"))
+        paragraph = E.SubElement(content, q("w", "p"))
+        props = E.SubElement(paragraph, q("w", "pPr"))
+        set_prop(props, "spacing", before=0, after=0)
+        run = E.SubElement(paragraph, q("w", "r"))
+        rp = E.SubElement(run, q("w", "rPr"))
+        set_prop(
+            rp,
+            "rFonts",
+            ascii="Times New Roman",
+            hAnsi="Times New Roman",
+            eastAsia="宋体",
+        )
+        set_prop(rp, "sz", val=21)
+        E.SubElement(run, q("w", "t")).text = "版权所有：侵权必究"
+        return pict
     mc = "http://schemas.openxmlformats.org/markup-compatibility/2006"
     v = "urn:schemas-microsoft-com:vml"
     ns = {**NS, "mc": mc, "v": v}
@@ -618,10 +654,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--source",
         type=Path,
-        default=next((ROOT / "SOP_case/工商业柜测试方案").glob("*.docx")),
+        default=None,
     )
     parser.add_argument(
         "--out", type=Path, default=ROOT / "templates/cabinet-test-plan/v1"
     )
     args = parser.parse_args()
-    build(args.source, args.out)
+    source = args.source or next((ROOT / "SOP_case/工商业柜测试方案案例").glob("*.docx"), None)
+    if source is None:
+        parser.error("请通过 --source 指定本地案例 DOCX")
+    build(source, args.out)

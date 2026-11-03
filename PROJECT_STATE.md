@@ -2,7 +2,7 @@
 
 ## Development Stage
 
-Production remains at `f0023ef` (cabinet reports and boost plans), with its two deployed masters approved. The rebuilt boost home master was approved for release by the user’s production-publish instruction on 2026-11-03; its current approved hash is committed in the manifest. The local working tree now also implements cabinet test plans and two-level business/document project creation; this release is not deployed. The user explicitly requested all template release approvals be completed on this development computer on 2026-11-03; all three current master hashes are now pinned as approved in their manifests. Cross-machine UAT and Feishu end-to-end acceptance remain.
+Production is reported by the user at `bf9edcd`: cabinet reports and boost plans pass, but cabinet plans fail at Word Documents.Open with “文件可能已经损坏”. The rebuilt boost home master was approved for release by the user’s production-publish instruction on 2026-11-03; its current approved hash is committed in the manifest. The local working tree now also implements cabinet test plans and two-level business/document project creation; this release is not deployed. The user explicitly requested all template release approvals be completed on this development computer on 2026-11-03; all three current master hashes are now pinned as approved in their manifests. Cross-machine UAT and Feishu end-to-end acceptance remain.
 
 Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
@@ -93,7 +93,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 
 ## Current Issues / Risks
 
-* All three current masters are approved in their own manifests, including cabinet-test-plan `189b649afb32`. Production deployment requires no template review or manual approval. Each project still edits the workbook parameters and applicable alternatives; the 内容核对 sheet documents inherited example-value concerns without changing engineering text automatically. The new release has not been deployed to production.
+* All three current masters are approved in their own manifests, including cabinet-test-plan `159a9f88da74`. Production deployment requires no template review or manual approval. Each project still edits the workbook parameters and applicable alternatives; the 内容核对 sheet documents inherited example-value concerns without changing engineering text automatically. The new release has not been deployed to production.
 * The backup example now includes `processed`, `boost` and `cabinet_plan`; copy this coverage into the actual deployment backup job during rollout. Bootstrap-managed production should receive the additive tables on API/worker startup, not the entire Alembic chain.
 
 
@@ -109,7 +109,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 ## Active Local Runtime
 
 * The user is testing the development API at `127.0.0.1:8010` and the shared Word worker from this checkout, using `runtime/sop-igs.db` (SQLite) and `SOP_WORD_COM_ENABLED=true`. These services were refreshed after the registry-sync fix; the production PostgreSQL deployment was not changed.
-* Current cabinet-plan master/manifest/registry hash: `189b649afb32` (regular headings, repeated copyright margin label, unique first-page filename). The stale registry hash after the layout rebuild caused repeated `TEMPLATE_CHANGED` failures and is now repaired. The original project was successfully regenerated through the refreshed running worker after whole-document heading correction and paragraph-content audit (22 pages, reopened, all 64 real headings verified as regular 12 pt with zero heading pagination-control flags, 1064 body paragraphs preserved, no orphan headings, title block page 1, summary/body pages 2/3); failed snapshots were retained unchanged.
+* Current cabinet-plan master/manifest/registry hash: `159a9f88da74` (regular headings, repeated copyright margin label, unique first-page filename). The stale registry hash after the layout rebuild caused repeated `TEMPLATE_CHANGED` failures and is now repaired. The original project was successfully regenerated through the refreshed running worker after whole-document heading correction and paragraph-content audit (22 pages, reopened, all 64 real headings verified as regular 12 pt with zero heading pagination-control flags, 1064 body paragraphs preserved, no orphan headings, title block page 1, summary/body pages 2/3); failed snapshots were retained unchanged.
 * Recovery backup: `runtime/repair-backups/template-sync-20261028-090854/sop-igs.db`, with an audit/recovery summary beside it. Local API/worker output is in `runtime/logs/template-sync-*`. Latest margin-label regeneration and backup are under `runtime/repair-backups/margin-labels-*`; the current 22-page PDF was checked for exactly one copyright label on each page and exactly one filename label, on page 1. `tests/output/cabinet-plan/margin-labels-audit.json` records the page checks.
 
 ## Boost Home Update Validation
@@ -126,3 +126,7 @@ Canonical source repository: https://github.com/pengcheng2000/SOP-IGS (public).
 ## Current Focus
 
 The validated 2026-11-03 release is prepared for GitHub main and production-computer deployment. All three workflow masters are approved for production; production only pulls code, backs up, builds, restarts and verifies the release. Production rollout remains a separate action on the target computer. Continue cross-machine UAT, boost workbook-spec acceptance and Feishu QR-login acceptance.
+
+## Cabinet Header Compatibility Patch
+
+Production isolated the open failure to the repeated header copyright textbox. The patch replaces its copied DrawingML/VML AlternateContent with a self-contained VML rectangle and plain WordprocessingML text; no external shapetype, empty imagedata or Office/WPS extensions remain in that header label. Position, rotation and one copyright label per page are retained. The footer filename remains unchanged. The rebuilt master has its own approved hash; deployment needs no approval step. Local tests pass (99 passed, 2 skipped), and the full native Word case opens/reopens at 22 pages with all 1064 paragraphs preserved and exactly one copyright label per page. Production Word-version acceptance still requires deploying this patch and starting a new generation; do not rewrite historical failed snapshots or use OpenAndRepair to hide the fault.

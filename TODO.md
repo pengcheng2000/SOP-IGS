@@ -2,12 +2,14 @@
 
 ## Doing
 
+* Deploy the cabinet header compatibility patch over production bf9edcd, restart API and the single Word Worker, and start a new cabinet-plan generation. Verify Word opens the result, copyright repeats once per page, and the title block remains on page 1. Production failure is documented in PROJECT_STATE.md; existing failed jobs remain unchanged.
+
 * After any future master change, re-review it and update `approved_master_sha256` in that template's `manifest.yaml` (deployments then need nothing).
 * Complete cross-machine browser UAT for both product choices through `http://10.122.3.224:8010`.
 
 ## Next
 
-* Deploy the published release to the production computer (all three workflow masters approved; no production-side template review required): back up DB plus originals/processed/outputs/boost/cabinet_plan, rebuild frontend, let API/worker bootstrap add cabinet_plan_* tables, restart the single interactive worker, and verify the sequential business → document → details creation flow for all three workflows remotely; keep API/worker template directories aligned and confirm the registered master hash after rollout. Production is still f0023ef; local automated acceptance is complete.
+* Deploy the published release to the production computer (all three workflow masters approved; no production-side template review required): back up DB plus originals/processed/outputs/boost/cabinet_plan, rebuild frontend, let API/worker bootstrap add cabinet_plan_* tables, restart the single interactive worker, and verify the sequential business → document → details creation flow for all three workflows remotely; keep API/worker template directories aligned and confirm the registered master hash after rollout. Production reached bf9edcd; cabinet-plan Word opening requires the header compatibility patch.
 
 * Register `http://10.122.3.224:8010/api/auth/feishu/callback` in the Feishu application, confirm its employee availability scope/permissions, and complete a real QR-code login. Add admin open IDs later if automatic Feishu-admin promotion is required.
 * Keep monitoring unattended 02:00 backups; the 2026-10-20 run returned result 0.

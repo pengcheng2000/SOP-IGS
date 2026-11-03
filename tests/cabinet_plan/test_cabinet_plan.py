@@ -206,6 +206,12 @@ def test_generation_contains_live_fields_and_frozen_date(tmp_path):
             if "版权所有" in "".join(box.xpath(".//w:t/text()", namespaces=NS))
         ]
         assert len(copyright_boxes) == 1
+        # Headers use a self-contained legacy textbox, not case-specific Office/WPS shapes.
+        for header in headers:
+            assert not header.xpath("//mc:AlternateContent", namespaces=margin_ns)
+            assert not header.xpath("//*[local-name()='imagedata']")
+            assert not header.xpath("//*[@type='#_x0000_t202']")
+        assert any(header.xpath("//*[@id='CabinetCopyright']") for header in headers)
         assert "侵权必究" in "".join(
             copyright_boxes[0].xpath(".//w:t/text()", namespaces=NS)
         )

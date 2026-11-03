@@ -54,6 +54,13 @@ New-NetFirewallRule -DisplayName "SOP-IGS 8010" -Direction Inbound -Protocol TCP
 
 ## 3. 初始化与验证
 
+API 与 Worker 启动时分别初始化三种工作流，包括新增的 `cabinet_plan_*` 四张表。
+工商业柜方案源文件和输出保存在 `SOP_DATA_ROOT/cabinet_plan/`，备份必须包含此目录。
+由 bootstrap 管理的既有生产库继续使用启动初始化；仅已经由 Alembic 管理的库使用迁移 `0007`，不要对无迁移基线的旧库直接执行整个迁移链。
+本次升压新版母版的批准哈希已随代码提交，部署后应为 `approved`。其首页接管基础信息和第1～4章，电子文件名在首页 C52，网页无需重复填写。新增工商业柜方案仍保持 `review_required`，业务核对后才能填写其批准哈希；不要在部署机自行批准。
+
+升级现有生产机时，先停止 API 和 Worker 的完整子进程树并暂停恢复触发器，再备份数据库、配置及上述文件目录，然后 `git pull --ff-only origin main`。更新依赖、构建前端、重启 API 和唯一交互式 Word Worker 后恢复原有触发器。具体升级提示词见 `CODEX_DEPLOY_PROMPT.md`。
+
 ```powershell
 .\.venv\Scripts\python -m app.bootstrap
 .\.venv\Scripts\python -m pytest

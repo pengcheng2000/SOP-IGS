@@ -35,10 +35,13 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, setCsrfToken } from "./api";
 import BrandLogo from "./components/BrandLogo";
+import CreateProjectDialog from "./components/CreateProjectDialog";
 import FeishuQrLogin from "./components/FeishuQrLogin";
 import TestPeriodInput from "./components/TestPeriodInput";
 import BoostProjectCard from "./features/boost/BoostProjectCard";
 import BoostWorkspace, { useBoostConfig } from "./features/boost/BoostWorkspace";
+import CabinetPlanWorkspace, { CabinetPlanCard, useCabinetPlanConfig } from "./features/cabinet-plan/CabinetPlanWorkspace";
+import type { CabinetPlanProject } from "./features/cabinet-plan/types";
 import type { BoostProject } from "./features/boost/types";
 import GenerationPanel from "./features/generation/GenerationPanel";
 import PhotoWorkspace from "./features/photos/PhotoWorkspace";
@@ -121,28 +124,31 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   );
 }
 
-type ProductKind = "cabinet" | "boost";
-
-function ProjectList({ onOpen, onOpenBoost }: { onOpen: (project: Project) => void; onOpenBoost: (project: BoostProject) => void }) {
+function ProjectList({ onOpen, onOpenBoost, onOpenPlan }: { onOpen: (project: Project) => void; onOpenBoost: (project: BoostProject) => void; onOpenPlan: (project: CabinetPlanProject) => void }) {
   const { message } = AntApp.useApp();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
-  const [productKind, setProductKind] = useState<ProductKind>("cabinet");
-  const [form] = Form.useForm();
   const projects = useQuery({ queryKey: ["projects"], queryFn: () => api<Project[]>("/api/projects") });
   const boostProjects = useQuery({ queryKey: ["boost-projects"], queryFn: () => api<BoostProject[]>("/api/boost/projects") });
   const boostConfig = useBoostConfig();
+  const planConfig = useCabinetPlanConfig();
+  const planProjects = useQuery({ queryKey: ["cabinet-plan-projects"], queryFn: () => api<CabinetPlanProject[]>("/api/cabinet-plans/projects") });
   const listItems = [
+    ...(planProjects.data ?? []).map((project) => ({ kind: "cabinet-plan" as const, project, updatedAt: project.updated_at })),
     ...(projects.data ?? []).map((project) => ({ kind: "cabinet" as const, project, updatedAt: project.updated_at })),
     ...(boostProjects.data ?? []).map((project) => ({ kind: "boost" as const, project, updatedAt: project.updated_at }))
   ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const createPlan = useMutation({
+    mutationFn: (values: { name?: string; description?: string }) => api<CabinetPlanProject>("/api/cabinet-plans/projects", { method: "POST", body: JSON.stringify({ name: values.name || "", description: values.description || "" }) }),
+    onSuccess: (project) => { queryClient.invalidateQueries({ queryKey: ["cabinet-plan-projects"] }); setModalOpen(false); onOpenPlan(project); },
+    onError: (error) => message.error(error.message)
+  });
   const createBoost = useMutation({
     mutationFn: (values: { name: string; description: string }) =>
       api<BoostProject>("/api/boost/projects", { method: "POST", body: JSON.stringify(values) }),
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["boost-projects"] });
       setModalOpen(false);
-      form.resetFields();
       onOpenBoost(project);
     },
     onError: (error) => message.error(error.message)
@@ -153,7 +159,6 @@ function ProjectList({ onOpen, onOpenBoost }: { onOpen: (project: Project) => vo
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       setModalOpen(false);
-      form.resetFields();
       onOpen(project);
     },
     onError: (error) => message.error(error.message)
@@ -164,18 +169,20 @@ function ProjectList({ onOpen, onOpenBoost }: { onOpen: (project: Project) => vo
         <div>
           <Text className="eyebrow">PROJECT WORKSPACE</Text>
           <Title>测试 SOP 项目</Title>
-          <Paragraph>从业务选择到照片排版，保持每一次生成都可追溯、可复现。</Paragraph>
+          <Paragraph>按业务创建测试报告或测试方案，上传资料并生成可编辑 Word。</Paragraph>
         </div>
         <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>新建项目</Button>
       </section>
-      {projects.isLoading || boostProjects.isLoading ? <Skeleton active /> : listItems.length ? (
+      {projects.isLoading || boostProjects.isLoading || planProjects.isLoading ? <Skeleton active /> : listItems.length ? (
         <Row gutter={[18, 18]}>
-          {listItems.map((item) => item.kind === "boost" ? (
+          {listItems.map((item) => item.kind === "cabinet-plan" ? (
+            <Col xs={24} lg={12} xl={8} key={`plan-${item.project.id}`}><CabinetPlanCard project={item.project} onOpen={onOpenPlan} /></Col>
+          ) : item.kind === "boost" ? (
             <Col xs={24} lg={12} xl={8} key={item.project.id}><BoostProjectCard project={item.project} onOpen={onOpenBoost} /></Col>
           ) : (
             <Col xs={24} lg={12} xl={8} key={item.project.id}>
               <Card className="project-card" hoverable onClick={() => onOpen(item.project)}>
-                <div className="project-card-head"><div className="project-icon"><FolderOpenOutlined /></div><Space size={4}><Tag color="blue">工商业柜</Tag><Tag color={item.project.status === "active" ? "green" : "default"}>{item.project.status === "active" ? "进行中" : item.project.status}</Tag></Space></div>
+                <div className="project-card-head"><div className="project-icon"><FolderOpenOutlined /></div><Space size={4}><Tag color="blue">工商业柜</Tag><Tag>测试报告</Tag><Tag color={item.project.status === "active" ? "green" : "default"}>{item.project.status === "active" ? "进行中" : item.project.status}</Tag></Space></div>
                 <Title level={4}>{item.project.name}</Title>
                 <Paragraph ellipsis={{ rows: 2 }}>{item.project.description || "尚未填写项目说明"}</Paragraph>
                 <div className="project-stats"><span><b>{item.project.selected_test_item_ids.length}</b> 测试项</span><span><b>{item.project.photo_count}</b> 照片</span><span>版本 {item.project.document_version}</span></div>
@@ -184,21 +191,18 @@ function ProjectList({ onOpen, onOpenBoost }: { onOpen: (project: Project) => vo
           ))}
         </Row>
       ) : <Empty description="还没有 SOP 项目" />}
-      <Modal title="新建 SOP 项目" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
-        <Form form={form} layout="vertical" onFinish={(values) => (productKind === "boost" ? createBoost : create).mutate(values)}>
-          <Form.Item label="产品类型">
-            <Segmented
-              block
-              value={productKind}
-              onChange={(value) => setProductKind(value as ProductKind)}
-              options={[{ value: "cabinet", label: "工商业柜" }, { value: "boost", label: "升压一体机", disabled: !boostConfig.data?.available }]}
-            />
-          </Form.Item>
-          <Form.Item name="name" label="项目名称" rules={[{ required: true, message: "请输入项目名称" }]}><Input placeholder={productKind === "boost" ? "例如：某项目站点升压一体机测试需求" : "例如：125kW 液冷户外柜型式测试"} /></Form.Item>
-          <Form.Item name="description" label="项目说明"><Input.TextArea rows={4} placeholder="说明产品、使用场景和本次测试差异" /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={create.isPending || createBoost.isPending} block>创建并进入</Button>
-        </Form>
-      </Modal>
+      {modalOpen && <CreateProjectDialog
+        busy={create.isPending || createBoost.isPending || createPlan.isPending}
+        boostAvailable={Boolean(boostConfig.data?.available)}
+        cabinetPlanAvailable={Boolean(planConfig.data?.available)}
+        onCancel={() => setModalOpen(false)}
+        onCreate={({ business, document, name, description }) => {
+          const values = { name: name ?? "", description: description ?? "" };
+          if (business === "cabinet" && document === "plan") createPlan.mutate(values);
+          else if (business === "boost") createBoost.mutate(values);
+          else create.mutate(values);
+        }}
+      />}
     </main>
   );
 }
@@ -262,7 +266,7 @@ function Workspace({ initial, onBack, isAdmin }: { initial: Project; onBack: () 
   }
   return (
     <main className="workspace-shell">
-      <div className="workspace-top"><Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>返回项目列表</Button><div><Text className="eyebrow">SOP PROJECT</Text><Title level={2}>{project.name}</Title></div><Tag color="green">编辑中 · 已保存</Tag></div>
+      <div className="workspace-top"><Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>返回项目列表</Button><div><Text className="eyebrow">工商业柜 · 测试报告</Text><Title level={2}>{project.name}</Title></div><Tag color="green">编辑中 · 已保存</Tag></div>
       <Segmented className="workspace-nav" block options={steps} value={step} onChange={(value) => void changeStep(String(value))} />
       {step === "basic" && <BasicInfo project={project} onSaved={(updated) => { setProject(updated); api(`/api/projects/${project.id}/ai-advice`, { method: "POST" }).catch(() => undefined); }} />}
       {step === "tests" && (catalog.isLoading ? <Skeleton active /> : (
@@ -389,6 +393,7 @@ function AppContent() {
   const [checking, setChecking] = useState(true);
   const [activeProject, setActiveProject] = useState<Project>();
   const [activeBoostProject, setActiveBoostProject] = useState<BoostProject>();
+  const [activePlanProject, setActivePlanProject] = useState<CabinetPlanProject>();
   const [userModal, setUserModal] = useState(false);
   const [passwordModal, setPasswordModal] = useState(false);
   const queryClient = useQueryClient();
@@ -400,7 +405,7 @@ function AppContent() {
   }, []);
   if (checking) return <div className="center-screen"><Spin size="large" /></div>;
   if (!user) return <Login onLogin={setUser} />;
-  async function logout() { await api("/api/auth/logout", { method: "POST" }); setCsrfToken(); setActiveProject(undefined); setActiveBoostProject(undefined); queryClient.clear(); setUser(undefined); }
+  async function logout() { await api("/api/auth/logout", { method: "POST" }); setCsrfToken(); setActiveProject(undefined); setActiveBoostProject(undefined); setActivePlanProject(undefined); queryClient.clear(); setUser(undefined); }
   return (
     <Layout className="app-layout">
       <Header className="app-header">
@@ -410,7 +415,8 @@ function AppContent() {
       <Content>
         {activeProject ? <Workspace initial={activeProject} onBack={() => setActiveProject(undefined)} isAdmin={user.role === "admin"} />
           : activeBoostProject ? <BoostWorkspace initial={activeBoostProject} onBack={() => setActiveBoostProject(undefined)} isAdmin={user.role === "admin"} />
-            : <ProjectList onOpen={setActiveProject} onOpenBoost={setActiveBoostProject} />}
+            : activePlanProject ? <CabinetPlanWorkspace initial={activePlanProject} onBack={() => setActivePlanProject(undefined)} isAdmin={user.role === "admin"} />
+            : <ProjectList onOpen={setActiveProject} onOpenBoost={setActiveBoostProject} onOpenPlan={setActivePlanProject} />}
       </Content>
       <UserAdmin open={userModal} onClose={() => setUserModal(false)} currentUserId={user.id} />
       <ChangePassword open={passwordModal} onClose={() => setPasswordModal(false)} />

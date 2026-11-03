@@ -2,6 +2,8 @@ from logging.config import fileConfig
 
 from alembic import context
 from app import models  # noqa: F401
+from app.boost import models as boost_models  # noqa: F401
+from app.cabinet_plan import models as cabinet_plan_models  # noqa: F401
 from app.config import get_settings
 from app.db import Base
 

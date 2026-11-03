@@ -26,12 +26,13 @@ export type SourceTableCell = { text: string; col: number; col_span: number; row
 
 export type SourceItem =
   | { type: "heading"; level: number; text: string; src: string }
-  | { type: "paragraph"; kind: "body" | "note"; text: string; src: string }
-  | { type: "list"; style: "decimal" | "letter" | "bullet"; continues?: boolean; src: string; items: Array<{ text: string; level: number; src: string }> }
+  | { type: "paragraph"; kind: "body" | "note" | "indent"; text: string; src: string }
+  | { type: "list"; style: "decimal" | "letter" | "bullet" | "circle"; continues?: boolean; src: string; items: Array<{ text: string; level: number; src: string }> }
   | { type: "table"; col_widths: number[]; header_rows: number; src: string; rows: SourceTableCell[][] }
   | { type: "image"; ref: SourceImage; src: string };
 
 export type SourceDocument = {
+  extra?: { fields?: Record<string, { value: string; source: string }>; references?: string[]; environment?: SourceItem; instruments?: SourceItem };
   parser_version: string;
   revision_history: string[];
   chapters: Array<{ title: string; sheet: string; items: SourceItem[] }>;
@@ -57,6 +58,8 @@ export type SourceFile = SourceFileSummary & { issues: ParseIssue[]; document: S
 export type BoostProject = {
   id: string;
   product_type: "boost-integrated-unit";
+  resolved_fields: Record<string, string>;
+  field_sources: Record<string, { kind: string; cell: string }>;
   name: string;
   description: string;
   document_number: string;

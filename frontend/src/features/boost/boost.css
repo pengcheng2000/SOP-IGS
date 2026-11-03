@@ -10,6 +10,14 @@
 .preview-note { padding: 6px 10px; border-radius: 8px; background: #fff8e6; }
 .preview-list { margin: 4px 0 4px 18px; padding-left: 24px; }
 .preview-list li.sub { margin-left: 22px; list-style-type: lower-alpha; }
+.preview-list.letter { list-style-type: lower-alpha; }
+@counter-style circled-decimal {
+  system: fixed;
+  symbols: "①" "②" "③" "④" "⑤" "⑥" "⑦" "⑧" "⑨" "⑩" "⑪" "⑫" "⑬" "⑭" "⑮" "⑯" "⑰" "⑱" "⑲" "⑳";
+  suffix: " ";
+  fallback: decimal;
+}
+.preview-list.circle { list-style-type: circled-decimal; }
 .preview-table-wrap { margin: 8px 0 8px 18px; overflow-x: auto; }
 .preview-table { border-collapse: collapse; min-width: 60%; font-size: 13px; }
 .preview-table td { border: 1px solid #c7d2cf; padding: 4px 8px; vertical-align: middle; text-align: center; }
@@ -26,3 +34,5 @@
 .template-banner p { margin: 0; color: #38605a; font-size: 13px; line-height: 1.7; }
 .template-banner .ant-btn { flex: none; height: 44px; padding: 0 22px; font-weight: 600; box-shadow: 0 6px 16px rgba(15,118,110,.28); }
 @media (max-width: 700px) { .template-banner { flex-direction: column; align-items: stretch; } }
+
+.boost-workspace .preview-table tr.header td { font-weight: normal; }

@@ -15,6 +15,8 @@ from pathlib import Path
 from sqlalchemy import and_, or_, select
 
 from ..boost.bootstrap import bootstrap_boost
+from ..cabinet_plan.bootstrap import bootstrap_cabinet_plan
+from ..cabinet_plan.worker import claim_cabinet_plan_task, run_cabinet_plan_task
 from ..boost.worker import claim_boost_task, run_boost_task
 from ..bootstrap import bootstrap
 from ..config import get_settings
@@ -363,18 +365,23 @@ def _heartbeat_loop(worker_id: str) -> None:
 def main() -> None:
     bootstrap()
     bootstrap_boost()
+    bootstrap_cabinet_plan()
     settings = get_settings()
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     threading.Thread(target=_heartbeat_loop, args=(worker_id,), daemon=True, name="heartbeat").start()
     LOGGER.info("Word worker started id=%s com=%s", worker_id, settings.word_com_enabled)
+    consumers = [(claim_task, run_task), (claim_boost_task, run_boost_task),
+                 (claim_cabinet_plan_task, run_cabinet_plan_task)]
+    next_queue = 0
     while True:
-        task_id = claim_task(worker_id)
-        if task_id:
-            run_task(task_id)
-            continue
-        boost_task_id = claim_boost_task(worker_id)
-        if boost_task_id:
-            run_boost_task(boost_task_id)
+        for offset in range(len(consumers)):
+            index = (next_queue + offset) % len(consumers)
+            claim, run = consumers[index]
+            task_id = claim(worker_id)
+            if task_id:
+                run(task_id)
+                next_queue = (index + 1) % len(consumers)
+                break
         else:
             time.sleep(settings.worker_poll_seconds)
 

@@ -2,20 +2,16 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
-import subprocess
-import sys
-import tempfile
-import time
 from datetime import timedelta
-from pathlib import Path
 
 from sqlalchemy import and_, or_, select
 
 from ..config import get_settings
 from ..db import SessionLocal
+from ..document_common.runner import WordProcessError as BoostWordError
+from ..document_common.runner import finalize_with_word as _finalize_with_word
 from ..models import utcnow
 from ..time_utils import utc_iso
 from .docx.builder import generate_boost_docx
@@ -28,8 +24,6 @@ LOGGER = logging.getLogger("sop.boost-worker")
 LEASE = timedelta(minutes=15)
 
 
-class BoostWordError(RuntimeError):
-    code = "WORD_COM_FAILED"
 
 
 def _fail_abandoned_tasks(db) -> None:
@@ -92,42 +86,6 @@ def _progress(task: BoostGenerationTask, phase: str, percent: int, message: str,
         "phase": phase, "progress_percent": task.progress_percent, "message": message,
         "details": details or {}, "created_at": utc_iso(utcnow()),
     }]
-
-
-def _finalize_with_word(path: Path, timeout_seconds: int, heartbeat) -> dict:
-    creation_flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-    # The child's output goes to temporary files, not pipes: a Windows pipe holds only 4 KB and the child
-    # blocks on exit when the heading report is larger, while this loop only polls. Output is UTF-8 because
-    # heading text may contain any Unicode character.
-    with tempfile.TemporaryFile() as out_file, tempfile.TemporaryFile() as err_file:
-        process = subprocess.Popen(
-            [sys.executable, "-m", "app.boost.docx.word", str(path.resolve())],
-            stdout=out_file,
-            stderr=err_file,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-            cwd=str(Path(__file__).resolve().parents[2]),
-            creationflags=creation_flags,
-        )
-        started = time.monotonic()
-        while process.poll() is None and time.monotonic() - started < timeout_seconds:
-            heartbeat(round(time.monotonic() - started))
-            time.sleep(1)
-        if process.poll() is None:
-            if os.name == "nt":
-                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False, capture_output=True)
-            else:
-                process.kill()
-            raise BoostWordError(f"Word COM 超过 {timeout_seconds} 秒未完成")
-        out_file.seek(0)
-        err_file.seek(0)
-        stdout = out_file.read().decode("utf-8", errors="replace")
-        stderr = err_file.read().decode("utf-8", errors="replace")
-    if process.returncode:
-        raise BoostWordError((stderr or stdout or "Word COM 子进程失败").strip())
-    try:
-        return json.loads(stdout.strip().splitlines()[-1])
-    except (IndexError, json.JSONDecodeError) as exc:
-        raise BoostWordError("Word COM 未返回有效验证结果") from exc
 
 
 def heading_mismatches(expected_headings: list, com_report: dict) -> dict:

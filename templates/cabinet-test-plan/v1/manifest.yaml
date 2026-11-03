@@ -1,0 +1,48 @@
+template_key: cabinet-test-plan
+version: '1'
+manifest_version: '1'
+source_sha256: 752cdbc767421939d82e97dbebaac42db44a1fe2de823bfa0f1bf7ad66879798
+master_sha256: 189b649afb32f8d41e49ec1f09083d2b80025e02469be60c009a3f21708e3dfe
+fields:
+- key: document_title
+  label: 文档标题
+  required: true
+- key: scope_text
+  label: 适用范围
+  required: true
+  multiline: true
+- key: document_code
+  label: 编码
+  required: true
+- key: document_version
+  label: 版本
+  required: true
+- key: archive_month
+  label: 归档年月
+  type: month
+  required: true
+- key: product_line
+  label: 所属产品
+- key: drafter
+  label: 拟制
+- key: reviewer_1
+  label: 审核1
+- key: reviewer_2
+  label: 审核2
+- key: reviewer_3
+  label: 审核3
+- key: standardizer
+  label: 标准化
+- key: approver
+  label: 批准
+heading_numbering:
+  num_id: '9100'
+  ilvl_by_level:
+    1: 0
+    2: 1
+    3: 2
+    4: 3
+list_abstract_nums:
+  decimal: '9201'
+  circle: '9202'
+floating_drawings: 0

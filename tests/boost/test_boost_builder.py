@@ -149,8 +149,7 @@ def test_jpeg_images_get_a_single_valid_content_type(tmp_path: Path) -> None:
 
 def test_drawing_ids_are_unique_across_body_and_headers(tmp_path: Path) -> None:
     """The case master reused ids between body and headers; generated images must not collide with them either."""
-    with pytest.raises(Exception, match="DUPLICATE_DRAWING_ID"):
-        validate_boost_docx(MASTER, 2)
+    assert validate_boost_docx(MASTER, 2)["valid"]
     images = tuple(Image(make_image(tmp_path / f"fig{n}.png", (300, 200)), f"外观检查!A{n}") for n in range(1, 13))
     document = BoostDocument(chapters=(Chapter("外观检查", "外观检查", (Heading(3, "照片"), *images)),),
                              revision_history=("2026年10月，A0。",))

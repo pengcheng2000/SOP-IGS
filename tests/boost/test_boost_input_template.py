@@ -28,11 +28,11 @@ def test_template_reproduces_the_case_structure(tmp_path: Path) -> None:
     chapters = {chapter.title: chapter.items for chapter in document.chapters}
 
     # no 三级标题 for chapters whose text sits directly under the chapter
-    assert not any(isinstance(item, Heading) for item in chapters["防水测试"] + chapters["接地连续性"])
+    assert not any(isinstance(item, Heading) for item in chapters["防水测试"] + chapters["接地连续性测试"])
     assert [type(item).__name__ for item in chapters["防水测试"]] == ["Paragraph", "ListBlock"]
 
     # 5.3.3: numbered list whose last item has lettered sub-items for the colour standards
-    wiring = [item for item in chapters["接线正确性"] if isinstance(item, ListBlock)]
+    wiring = [item for item in chapters["接线正确性测试"] if isinstance(item, ListBlock)]
     assert [block.style for block in wiring] == ["decimal", "letter"]
 
     # 800V/380V/220V/24V loops: one numbered list kept going across indented paragraphs
@@ -61,6 +61,8 @@ def test_template_has_instructions_and_validation(tmp_path: Path) -> None:
 def test_workbook_without_any_format_marker_is_rejected(tmp_path: Path) -> None:
     workbook = load_workbook(TEMPLATE)
     for sheet in workbook.worksheets:
+        if sheet.title == "首页":
+            continue
         for row in range(1, sheet.max_row + 1):
             sheet.cell(row, 10).value = None
     legacy = tmp_path / "legacy.xlsx"

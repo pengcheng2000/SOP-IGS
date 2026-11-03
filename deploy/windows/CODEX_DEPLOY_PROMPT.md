@@ -1,4 +1,4 @@
-# Codex 部署提示词（升压一体机版本）
+# Codex 部署提示词（报告与方案三工作流）
 
 在项目电脑上用 Codex 打开仓库根目录，把下面「提示词」整段发给它。
 
@@ -6,7 +6,7 @@
 
 ## 提示词
 
-你在项目电脑（Windows）上部署/升级 SOP-IGS。先读 `AGENTS.md`、`PROJECT_STATE.md`、`TODO.md`、`deploy/windows/README.md`，再动手。本次升级新增了第二个产品「升压一体机」（独立模块 `backend/app/boost/`，接口 `/api/boost`，新表 `boost_*`），并包含飞书扫码登录。工商业柜行为不变。
+你在项目电脑（Windows）上部署/升级 SOP-IGS。先读 `AGENTS.md`、`PROJECT_STATE.md`、`TODO.md`、`deploy/windows/README.md`，再动手。本次升级新增「工商业柜 / 测试方案」（独立模块 `backend/app/cabinet_plan/`，接口 `/api/cabinet-plans`，新表 `cabinet_plan_*`），创建项目按业务和文档类型两层分类。既有工商业柜报告、升压一体机方案继续可用。本次升压方案首页模板及格式修正已确认生产发布，批准哈希随 manifest 提交；新增工商业柜方案仍待业务复核，不要自行启用。
 
 ### 硬性约束
 
@@ -18,10 +18,10 @@
 
 ### 步骤
 
-1. **拉代码**：`git status` 确认干净后 `git pull origin main`。
-2. **后端依赖**（新增了 `openpyxl`，必须重装）：
+1. **升级准备**：确认生产目录、当前提交和数据目录，先暂停 Worker 的恢复触发器，确认队列无在途任务后停止 API 和旧 Worker 的完整 Python 子进程树（只停计划任务可能遗留消费者）。备份数据库、配置和 originals/processed/outputs/boost/cabinet_plan；`git status` 确认干净后 `git pull --ff-only origin main`，记录新提交。不要自动清理生产电脑的本地改动。
+2. **后端依赖**：
    ```powershell
-   .\.venv\Scripts\python -m pip install -e ".\backend"
+   .\.venv\Scripts\python -m pip install -e ".\backend[dev]"
    ```
 3. **前端构建**：`cd frontend; npm ci; npm run build`（后端从 `frontend/dist` 提供页面）。
 4. **`.env` 检查**（对照 `.env.example`，只补缺失项，不动已有值）：
@@ -29,24 +29,25 @@
    - 访问地址相关：`SOP_PUBLIC_BASE_URL`（与飞书后台重定向 URL 完全一致）、`SOP_SESSION_COOKIE_SECURE`。
    - 飞书：`SOP_FEISHU_APP_ID`、`SOP_FEISHU_APP_SECRET`、`SOP_FEISHU_ADMIN_OPEN_IDS`。
    - AI 建议：`SOP_LLM_BASE_URL/API_KEY/MODEL`，建议加 `SOP_LLM_TIMEOUT_SECONDS=90`（默认 10 秒太短会超时）。
-   - 升压一体机无需额外变量（可选 `SOP_BOOST_TEMPLATE_DIR`、`SOP_BOOST_MAX_SOURCE_FILE_BYTES`）。
-5. **数据库**：升压一体机的 4 张表（`boost_projects`、`boost_source_files`、`boost_generation_tasks`、`boost_generated_documents`）会在 API 启动时由 `bootstrap_boost()` 自动创建，也有 Alembic 迁移 `0004`。若生产库由 Alembic 管理，在 `backend` 目录执行 `alembic upgrade head`；否则运行 `.\.venv\Scripts\python -m app.bootstrap`。不要改动已有的 `projects` 等表。
-6. **跑测试**：`.\.venv\Scripts\python -m pytest -q`，必须全绿（应为 76 个）。失败就停下来报告，不要跳过。
+   - 两种方案无需额外变量；如需覆盖默认设置，分别使用 `SOP_BOOST_*` 和 `SOP_CABINET_PLAN_*`。
+5. **数据库**：工商业柜方案的 `cabinet_plan_projects/source_files/generation_tasks/generated_documents` 四张表由 API 和 Worker 启动时的 `bootstrap_cabinet_plan()` 自动创建；也提供 Alembic `0007`。现有生产库由 bootstrap 管理且没有迁移基线，继续使用启动初始化，不要执行整个 Alembic 迁移链。原有项目表无需搬迁。备份应包含 `originals`、`processed`、`outputs`、`boost`、`cabinet_plan` 及数据库。
+6. **跑测试**：使用隔离测试环境执行 `.\.venv\Scripts\python -m pytest -q`，必须全绿；通过数以实际输出为准。失败就停下来报告，不要跳过。
 7. **重启服务**：
    - API：重启 WinSW 服务（`deploy/windows/service/sop-api.xml`，监听 `0.0.0.0:8010`）。重启后确认没有旧的 uvicorn 进程占着 8010（`netstat -ano | findstr :8010`），旧进程不加载新代码是常见坑。
-   - **Word Worker 必须重启**：它是在专用 Windows 账号的登录会话里运行的计划任务/终端进程（`task-scheduler/start-word-worker.ps1`），不能当普通服务，也不能从后台无界面进程启动（后台启动的进程拉不起 Word）。停掉旧 Worker 再启动新的。同一个 Worker 进程同时处理两个产品的任务（先工商业柜队列，再升压一体机队列）。
+   - **Word Worker 必须重启**：它是在专用 Windows 账号的登录会话里运行的计划任务/终端进程（`task-scheduler/start-word-worker.ps1`），不能当普通服务，也不能从后台无界面进程启动（后台启动的进程拉不起 Word）。停掉旧 Worker 再启动新的。同一个 Worker 进程轮询工商业柜报告、升压一体机方案和工商业柜方案三条队列，每次执行一个任务。
 8. **Word 环境检查（升压一体机最容易卡在这里）**：
    - 专用账号已登录、Word 已激活，且账号不用于人工编辑 Word。
    - 如果生成任务卡在“等待 Word Worker”或 Word 进程一直不退出，先查是否装了 **OfficePLUS** 之类的 Word VSTO 加载项——它会让无界面 Word 卡住。开发机上的处理是把该加载项在当前用户下禁用（`HKCU\Software\Microsoft\Office\Word\Addins\<加载项>\LoadBehavior=0`）。这属于修改注册表：**先告诉我现象和要改的键，等我确认再改**。
    - 生成失败后检查残留的 `WINWORD.exe`，必要时只结束 Worker 账号下的残留进程。
-9. **模板批准**：无需任何操作。母版是否批准由 `manifest.yaml` 里的 `approved_master_sha256` 决定，随代码发布，启动时自动生效。如果部署后生产环境仍提示“母版未批准”，不要手动改数据库，汇报现象（`GET /api/boost/config` 的 `template_status`、manifest 里的哈希与实际 `master.docx` 哈希）即可。
+9. **模板批准**：以每个模板 manifest 的 `approved_master_sha256` 为准。升压新版的 approved_master_sha256 应与 master_sha256 和实际文件 SHA256 相同，启动后 /api/boost/config 应为 approved。新工商业柜方案仍是 review_required，不要在部署时自行批准。未批准的工商业柜方案暂不做生成冒烟测试，汇报 /api/cabinet-plans/config 的状态即可；它不应影响原柜报告和升压方案。
 10. **冒烟验证**（用管理员登录，浏览器操作）：
     - `/api/health/ready` 正常，管理页能看到 Worker 心跳。
-    - 新建项目时能选「工商业柜 / 升压一体机」，项目列表两种都显示。
+    - 新建项目先选「工商业柜 / 升压一体机」，再选「测试报告 / 测试方案」；升压报告暂不支持，旧项目的业务及文档类型显示正确。
     - 工商业柜：原流程（勾选测试项 → 上传照片 → 生成）不受影响。
-    - 升压一体机：填基础信息（归档日期是月份选择器）→ 下载「标准模板」→ 原样上传 → 预览出章节 → 生成 → 下载 docx，用 Word 打开检查：标题栏、电子文件名文本框、共 N 页、5.x.y.z 三级标题编号连续。
-    - 上传一个没有「格式」列的旧表格，应被拒绝并提示下载标准模板。
-11. **收尾**：按 `AGENTS.md` 更新 `PROJECT_STATE.md`（部署状态、已知问题）和 `TODO.md`（遗留项），不要写成流水账。
+    - 升压一体机：项目名称留空创建 → 下载新标准模板 → 在首页填写信息（电子文件名在 C52，区别于编码）→ 上传 → 只读信息预览及 11 个测试章节 → 生成 → 下载 docx。检查标题/适用范围无重复、环境和仪器来自首页、表头不加粗、PCS及主变/辅变列表显示1)/2)、编号缩进合理、版本修改记录为一级标题且左侧无黑点。无首页的旧标准文件保留原基础信息入口。
+    - 工商业柜方案（只在其母版以后获准时执行生成验证）：不填写项目名创建 → 下载标准模板 → 上传 → 预览16章、功率曲线和内容核对提醒 → 信息确认只补缺项 → 生成并下载；首页、目录、正文分别从第1/2/3页开始，正文连续编号，标题栏及总页数正确。
+    - 上传一个没有「格式」列的旧表格，应被拒绝并提示下载对应标准模板。
+11. **收尾**：确认只运行一个 Word Worker、恢复其原有恢复触发器；不要额外创建第二个消费者。按 `AGENTS.md` 更新 `PROJECT_STATE.md`（部署状态、已知问题）和 `TODO.md`（遗留项），不要写成流水账。
 
 ### 汇报格式
 

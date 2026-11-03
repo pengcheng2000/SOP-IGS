@@ -1,7 +1,9 @@
 """Project rules for 升压一体机: fields, preflight, snapshot and API payloads."""
+
 from __future__ import annotations
 
 import copy
+import hashlib
 import re
 
 from sqlalchemy import select
@@ -9,9 +11,10 @@ from sqlalchemy.orm import Session
 
 from ..models import Template
 from ..time_utils import utc_iso
-from .input.model import ERROR, WARNING
+from .input.home import HOME_FIELDS, normalize
+from .input.model import ERROR, WARNING, BoostDocument
 from .models import BoostProject, BoostSourceFile
-from .settings import BoostSettings, load_manifest
+from .settings import BoostSettings, get_boost_settings, load_manifest
 
 MONTH_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 
@@ -24,7 +27,25 @@ def current_template(db: Session, settings: BoostSettings) -> Template | None:
     if not (settings.template_dir / "manifest.yaml").is_file():
         return None
     data = manifest(settings)
-    return db.scalar(select(Template).where(Template.key == data["template_key"], Template.version == data["version"]))
+    if (
+        not settings.master.is_file()
+        or hashlib.sha256(settings.master.read_bytes()).hexdigest() != data["master_sha256"]
+    ):
+        return None
+    template = db.scalar(
+        select(Template).where(
+            Template.key == data["template_key"], Template.version == data["version"]
+        )
+    )
+    if template is not None and template.master_sha256 != data["master_sha256"]:
+        from ..services.template_approval import apply_manifest_approval
+
+        template.master_sha256 = data["master_sha256"]
+        template.source_sha256 = data["source_sha256"]
+        template.manifest_version = data["manifest_version"]
+        template.status = "review_required"
+        apply_manifest_approval(template, data, data["master_sha256"])
+    return template
 
 
 def latest_source_file(db: Session, project_id: str) -> BoostSourceFile | None:
@@ -68,6 +89,7 @@ def client_document(row: BoostSourceFile) -> dict | None:
         image.pop("path", None)
         image["url"] = f"/api/boost/source-files/{row.id}/images/{image['id']}"
 
+    document = normalize(BoostDocument.from_dict(document)).to_dict()
     for chapter in document.get("chapters", []):
         for item in chapter.get("items", []):
             if item["type"] == "image":
@@ -81,17 +103,26 @@ def client_document(row: BoostSourceFile) -> dict | None:
 
 
 def source_file_payload(row: BoostSourceFile) -> dict:
-    return {**source_file_summary(row), "issues": row.issues or [], "document": client_document(row)}
+    return {
+        **source_file_summary(row),
+        "issues": row.issues or [],
+        "document": client_document(row),
+    }
 
 
 def project_payload(db: Session, project: BoostProject) -> dict:
+    source = latest_source_file(db, project.id)
+    values, origins = resolved_metadata(project, manifest(get_boost_settings()), source)
     return {
+        "resolved_fields": values,
+        "field_sources": origins,
+        "name_override": project.name,
         "id": project.id,
         "product_type": "boost-integrated-unit",
-        "name": project.name,
+        "name": project.name or values.get("document_title") or "未命名测试方案",
         "description": project.description,
-        "document_number": project.document_number,
-        "document_version": project.document_version,
+        "document_number": values.get("document_number", ""),
+        "document_version": values.get("document_version", ""),
         "fields": project.fields or {},
         "status": project.status,
         "revision": project.revision,
@@ -101,16 +132,31 @@ def project_payload(db: Session, project: BoostProject) -> dict:
     }
 
 
-def resolve_fields(project: BoostProject, data: dict) -> dict[str, str]:
+def resolved_metadata(project, data, source=None):
+    extra = (source.document or {}).get("extra", {}) if source else {}
+    home = extra.get("fields", {})
     stored = project.fields or {}
-    values: dict[str, str] = {}
+    values, origins = {}, {}
     for field in data.get("fields", []):
-        column = field.get("column")
-        value = getattr(project, column) if column else stored.get(field["key"], "")
-        values[field["key"]] = (value or "").strip()
-    if not values.get("project_name"):
-        values["project_name"] = project.name
-    return values
+        key = field["key"]
+        entry = home.get(key, {})
+        value = (
+            entry.get("value", "")
+            if home
+            else (getattr(project, field["column"]) if field.get("column") else stored.get(key, ""))
+        )
+        values[key] = (value or "").strip()
+        origins[key] = {"kind": "excel" if home else "legacy", "cell": entry.get("source", "")}
+    if not home:
+        base = values.get("project_name") or project.name
+        base = re.sub(r"升压一体机(?:测试需求)?$", "", base).rstrip()
+        values["document_title"] = base + "升压一体机测试需求"
+        values["scope_text"] = f"本调试说明适用于{base}升压一体机的调试。"
+    return values, origins
+
+
+def resolve_fields(project, data, source=None):
+    return resolved_metadata(project, data, source)[0]
 
 
 def validate_fields(data: dict, values: dict[str, str]) -> list[str]:
@@ -133,23 +179,50 @@ def preflight(db: Session, project: BoostProject, settings: BoostSettings) -> di
     data = manifest(settings)
     blockers: list[dict] = []
     warnings: list[dict] = []
-    fields = resolve_fields(project, data)
-    missing = [field["label"] for field in data.get("fields", []) if field.get("required") and not fields.get(field["key"])]
+    source = latest_source_file(db, project.id)
+    fields = resolve_fields(project, data, source)
+    missing = [
+        field["label"]
+        + (
+            f"（{HOME_FIELDS[field['key']]}）"
+            if source and (source.document or {}).get("extra") and field["key"] in HOME_FIELDS
+            else ""
+        )
+        for field in data.get("fields", [])
+        if field.get("required") and not fields.get(field["key"])
+    ]
     if missing:
-        blockers.append({"code": "MISSING_REQUIRED_FIELD", "message": "请填写：" + "、".join(missing)})
+        blockers.append(
+            {
+                "code": "MISSING_REQUIRED_FIELD",
+                "message": "请在 Excel 首页填写：" + "、".join(missing)
+                if source and (source.document or {}).get("extra")
+                else "请填写：" + "、".join(missing),
+            }
+        )
     source = latest_source_file(db, project.id)
     stats: dict = {}
     if source is None:
         blockers.append({"code": "MISSING_SOURCE_FILE", "message": "请先上传测试项分类表"})
     else:
         counts = issue_counts(source.issues or [])
-        stats = {key: value for key, value in (source.summary or {}).items() if key.endswith("_count")}
+        stats = {
+            key: value for key, value in (source.summary or {}).items() if key.endswith("_count")
+        }
         if source.status != "parsed" or counts["error_count"]:
-            blockers.append({"code": "SOURCE_FILE_INVALID",
-                             "message": f"测试项分类表有 {counts['error_count']} 个错误，请修正后重新上传"})
+            blockers.append(
+                {
+                    "code": "SOURCE_FILE_INVALID",
+                    "message": f"测试项分类表有 {counts['error_count']} 个错误，请修正后重新上传",
+                }
+            )
         if counts["warning_count"]:
-            warnings.append({"code": "SOURCE_FILE_WARNINGS",
-                             "message": f"测试项分类表有 {counts['warning_count']} 条提醒，请确认后继续"})
+            warnings.append(
+                {
+                    "code": "SOURCE_FILE_WARNINGS",
+                    "message": f"测试项分类表有 {counts['warning_count']} 条提醒，请确认后继续",
+                }
+            )
     return {
         "ready": not blockers,
         "blockers": blockers,
@@ -159,7 +232,9 @@ def preflight(db: Session, project: BoostProject, settings: BoostSettings) -> di
     }
 
 
-def snapshot(project: BoostProject, template: Template, source: BoostSourceFile, data: dict) -> dict:
+def snapshot(
+    project: BoostProject, template: Template, source: BoostSourceFile, data: dict
+) -> dict:
     return {
         "template_key": template.key,
         "template_version": template.version,
@@ -172,12 +247,12 @@ def snapshot(project: BoostProject, template: Template, source: BoostSourceFile,
             "fields": dict(project.fields or {}),
             "revision": project.revision,
         },
-        "fields": resolve_fields(project, data),
+        "fields": resolve_fields(project, data, source),
         "source_file": {
             "id": source.id,
             "sha256": source.sha256,
             "original_filename": source.original_filename,
             "parser_version": source.parser_version,
         },
-        "document": source.document,
+        "document": normalize(BoostDocument.from_dict(source.document)).to_dict(),
     }

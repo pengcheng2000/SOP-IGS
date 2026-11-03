@@ -10,7 +10,7 @@ export default function BoostProjectCard({ project, onOpen }: { project: BoostPr
     <Card className="project-card" hoverable onClick={() => onOpen(project)}>
       <div className="project-card-head">
         <div className="project-icon"><FileExcelOutlined /></div>
-        <Space size={4}><Tag color="purple">升压一体机</Tag><Tag color={project.status === "active" ? "green" : "default"}>{project.status === "active" ? "进行中" : project.status}</Tag></Space>
+        <Space size={4}><Tag color="purple">升压一体机</Tag><Tag>测试方案</Tag><Tag color={project.status === "active" ? "green" : "default"}>{project.status === "active" ? "进行中" : project.status}</Tag></Space>
       </div>
       <Title level={4}>{project.name}</Title>
       <Paragraph ellipsis={{ rows: 2 }}>{project.description || "尚未填写项目说明"}</Paragraph>

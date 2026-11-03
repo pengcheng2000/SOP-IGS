@@ -31,6 +31,8 @@ def test_every_placeholder_is_a_whole_text_run() -> None:
     manifest, document, _ = load()
     texts = document.xpath("//w:t/text()", namespaces=NS)
     for field in manifest["fields"]:
+        if field.get("legacy_only"):
+            continue
         token = "{{" + field["key"] + "}}"
         assert token in texts, token
         assert all(text == token for text in texts if token in text), token

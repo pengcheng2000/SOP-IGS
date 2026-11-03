@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ...services.image_pipeline import process_image
+from .home import normalize, read_home
 from .interpreter import PARSER_VERSION, interpret_workbook
 from .model import ERROR, BoostDocument, ImageRef, Issue
 from .workbook import SheetImage, WorkbookError, read_workbook
@@ -18,7 +19,9 @@ class ParseResult:
 
     @property
     def valid(self) -> bool:
-        return self.document is not None and not any(issue.severity == ERROR for issue in self.issues)
+        return self.document is not None and not any(
+            issue.severity == ERROR for issue in self.issues
+        )
 
     def summary(self) -> dict:
         return self.document.summary() if self.document is not None else {}
@@ -41,13 +44,21 @@ def parse_workbook(
         return ParseResult(None, (Issue(ERROR, exc.code, str(exc)),))
     total_images = sum(len(grid.images) for grid in grids)
     if total_images > max_images:
-        return ParseResult(None, (*issues, Issue(ERROR, "TOO_MANY_IMAGES", f"图片数量 {total_images} 超过上限 {max_images}")))
+        return ParseResult(
+            None,
+            (
+                *issues,
+                Issue(ERROR, "TOO_MANY_IMAGES", f"图片数量 {total_images} 超过上限 {max_images}"),
+            ),
+        )
 
     image_dir.mkdir(parents=True, exist_ok=True)
     stored: list[ImageRef] = []
 
     def store_image(image: SheetImage) -> ImageRef:
-        processed = process_image(image.data, max_bytes=max_image_bytes, max_pixels=max_image_pixels)
+        processed = process_image(
+            image.data, max_bytes=max_image_bytes, max_pixels=max_image_pixels
+        )
         index = len(stored) + 1
         target = image_dir / f"{index:03d}{processed.output_extension}"
         target.write_bytes(processed.data)
@@ -58,6 +69,13 @@ def parse_workbook(
         return ref
 
     document, interpretation_issues = interpret_workbook(
-        grids, store_image, revision_sheet=revision_sheet, ignored_sheets=ignored_sheets
+        grids, store_image, revision_sheet=revision_sheet, ignored_sheets=(*ignored_sheets, "首页")
     )
+    try:
+        extra = read_home(path, grids)
+    except (ValueError, KeyError, StopIteration, TypeError) as exc:
+        return ParseResult(
+            None, (*issues, Issue(ERROR, "INVALID_HOME", f"首页绑定无效：{exc}", "首页"))
+        )
+    document = normalize(replace(document, extra=extra, parser_version="boost-v2"))
     return ParseResult(document, (*issues, *interpretation_issues))

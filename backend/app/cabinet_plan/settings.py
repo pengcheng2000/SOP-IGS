@@ -1,0 +1,75 @@
+"""Settings for the cabinet-test-plan (工商业柜测试方案) product, independent of the cabinet ones."""
+
+from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+
+import yaml
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from ..config import REPOSITORY_ROOT, get_settings
+
+PRODUCT_KEY = "cabinet-test-plan"
+
+
+class CabinetPlanSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=str(REPOSITORY_ROOT / ".env"), env_prefix="SOP_CABINET_PLAN_", extra="ignore"
+    )
+
+    template_dir: Path = REPOSITORY_ROOT / "templates" / PRODUCT_KEY / "v1"
+    max_source_file_bytes: int = 30 * 1024 * 1024
+    max_images: int = 150
+
+    @property
+    def data_dir(self) -> Path:
+        return get_settings().data_root / "cabinet_plan"
+
+    @property
+    def sources_dir(self) -> Path:
+        return self.data_dir / "sources"
+
+    @property
+    def outputs_dir(self) -> Path:
+        return self.data_dir / "outputs"
+
+    @property
+    def temp_dir(self) -> Path:
+        return self.data_dir / "temp"
+
+    @property
+    def master(self) -> Path:
+        return self.template_dir / "master.docx"
+
+
+@lru_cache
+def get_cabinet_plan_settings() -> CabinetPlanSettings:
+    return CabinetPlanSettings()
+
+
+@lru_cache
+def _load_manifest(path: str, mtime_ns: int) -> dict:
+    del mtime_ns
+    try:
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError("工商业柜方案模板配置无法读取") from exc
+    required = {
+        "template_key",
+        "version",
+        "master_sha256",
+        "source_sha256",
+        "manifest_version",
+        "fields",
+        "heading_numbering",
+        "list_abstract_nums",
+    }
+    if not isinstance(data, dict) or not required <= data.keys():
+        raise ValueError("工商业柜方案模板配置缺少必要字段")
+    return data
+
+
+def load_manifest(directory: Path) -> dict:
+    path = directory / "manifest.yaml"
+    return _load_manifest(str(path), path.stat().st_mtime_ns)

@@ -40,4 +40,10 @@ def test_shipped_masters_are_approved_in_manifest(name: str) -> None:
     """The reviewed hash is committed with the master, so a deployment needs no approval step."""
     directory = ROOT / "templates" / name / "v1"
     manifest = yaml.safe_load((directory / "manifest.yaml").read_text(encoding="utf-8"))
-    assert manifest["approved_master_sha256"] == hashlib.sha256((directory / "master.docx").read_bytes()).hexdigest()
+    if manifest.get("review_status") == "pending":
+        assert not manifest.get("approved_master_sha256")
+    else:
+        assert (
+            manifest["approved_master_sha256"]
+            == hashlib.sha256((directory / "master.docx").read_bytes()).hexdigest()
+        )

@@ -27,6 +27,24 @@ button, input, textarea { font: inherit; }
 .project-icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; color: #0f766e; background: #e4f2ef; font-size: 20px; }
 .project-stats { display: flex; justify-content: space-between; border-top: 1px solid #edf0ef; padding-top: 14px; color: #70807d; font-size: 12px; }
 .project-stats b { color: #173a36; font-size: 16px; }
+.project-create-step { margin: 22px 0 18px; }
+.project-create-step h4 { margin: 6px 0 0; }
+.project-create-path { display: flex; align-items: center; gap: 4px; margin: -6px 0 18px; color: #82918d; }
+.project-create-path .ant-btn { padding-inline: 0; height: auto; }
+.project-create-path > .anticon { font-size: 10px; margin: 0 5px; }
+.project-create-choices { display: grid; gap: 14px; padding-bottom: 4px; }
+.project-create-choice { width: 100%; display: flex; align-items: center; gap: 16px; padding: 22px 20px; border: 1px solid #dce5e2; border-radius: 12px; background: white; color: #18312f; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.project-create-choice:not(:disabled):hover { border-color: #0f766e; background: #f2faf7; }
+.project-create-choice:focus-visible { outline: 3px solid rgba(15,118,110,.3); outline-offset: 2px; }
+.project-create-choice:disabled { cursor: not-allowed; background: #f6f7f6; color: #8a9692; }
+.project-create-choice-icon { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border-radius: 12px; background: #e7f3ef; color: #0f766e; font-size: 23px; }
+.project-create-choice:disabled .project-create-choice-icon { background: #edf0ee; color: #98a49f; }
+.project-create-choice-copy { min-width: 0; flex: 1; display: grid; gap: 5px; }
+.project-create-choice-copy strong { font-size: 17px; }
+.project-create-choice-copy > span { color: #75857f; font-size: 13px; line-height: 1.6; }
+.project-create-choice-arrow { color: #8a9c95; font-size: 14px; }
+.project-create-choice .ant-tag { flex: none; margin-inline-end: 0; }
+.project-create-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 24px; }
 .workspace-top { margin-bottom: 22px; }
 .workspace-top h2 { margin: 2px 0 0; }
 .workspace-nav { padding: 5px; margin-bottom: 20px; background: #e8eeec; }
@@ -117,6 +135,8 @@ button, input, textarea { font: inherit; }
 }
 
 @media (max-width: 560px) {
+  .app-header .ant-btn { padding-inline: 6px; }
+  .app-header > .ant-space { gap: 2px !important; }
   .login-page { padding-top: 8px; }
   .login-card { width: 92%; padding: 14px; }
   .login-brand { padding: 24px; }

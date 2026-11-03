@@ -43,6 +43,8 @@ def bootstrap_boost() -> None:
             )
             session.add(template)
         else:
+            if template.master_sha256 != manifest["master_sha256"]:
+                template.status = "review_required"
             template.source_sha256 = manifest["source_sha256"]
             template.master_sha256 = manifest["master_sha256"]
             template.manifest_version = manifest["manifest_version"]

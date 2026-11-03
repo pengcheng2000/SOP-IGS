@@ -1,6 +1,9 @@
 # SOP-IGS
 
-测试 SOP 智能生成系统。系统从固定的液冷户外柜 Word 母版出发，按项目选择保留测试章节、处理和排版照片，并生成可继续编辑的 DOCX。
+测试 SOP 智能生成系统。创建项目按“业务类型 → 文档类型”选择：工商业柜支持照片排版测试报告和 Excel 生成测试方案，升压一体机支持 Excel 生成测试方案。输出为可继续编辑的 DOCX。
+
+工商业柜方案的模板填写规则、字段映射、内容核对和验收方法见
+[`templates/cabinet-test-plan/v1/README.md`](templates/cabinet-test-plan/v1/README.md)。
 
 ## 本地开发
 

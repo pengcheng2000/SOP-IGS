@@ -42,7 +42,7 @@ from .model import (
 )
 from .workbook import SheetGrid, SheetImage, coord
 
-PARSER_VERSION = "v1"
+PARSER_VERSION = "boost-v2"
 HEADING_COLUMN = 1
 CONTENT_COLUMNS = range(2, 10)  # B..I
 FORMAT_COLUMN = 10  # J

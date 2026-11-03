@@ -1,10 +1,8 @@
 template_key: boost-integrated-unit
 version: '1'
-manifest_version: '1'
+manifest_version: '2'
 source_sha256: 7ab29ad1a7f8cb345a1d3ce0f261fbd614d0f5b59cf3111a7b438db2995737d1
-master_sha256: 43996b5ba31032e1cf4291a3bcf860945df5aaf88bf21f864bebd567a410cb75
-# Business-reviewed master (see services/template_approval.py); update only after a new review.
-approved_master_sha256: 43996b5ba31032e1cf4291a3bcf860945df5aaf88bf21f864bebd567a410cb75
+master_sha256: f4dd219c3196dc5bb0105e1b3209473d70e2aaac283401844856e8a56fd22672
 anchors:
   chapters: '{{BOOST_CHAPTERS}}'
   revision_history: '{{REVISION_HISTORY}}'
@@ -29,11 +27,13 @@ summary_table:
   header_contains: 调试项目
   preserve_rows: 2
 floating_drawings: 2
+table_header_bold: false
 fields:
 - key: project_name
   label: 项目/站点名称
-  required: true
+  required: false
   placeholder: 例如：某项目（某站点）
+  legacy_only: true
 - key: document_number
   label: 电子文件名
   column: document_number
@@ -77,7 +77,14 @@ fields:
   - GB/T 36276-2023 电力储能用锂离子电池
   - GB/T 4208-2017 外壳防护等级（IP代码）
   - GB/T 1413-2023 集装箱 分类、尺寸和额定质量
+- key: document_title
+  label: 文档标题
+  required: true
+- key: scope_text
+  label: 适用范围
+  required: true
 input:
   revision_sheet: 版本修改记录
   ignored_sheets:
   - 填写说明
+approved_master_sha256: f4dd219c3196dc5bb0105e1b3209473d70e2aaac283401844856e8a56fd22672

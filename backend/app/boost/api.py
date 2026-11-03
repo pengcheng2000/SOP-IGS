@@ -1,4 +1,5 @@
 """HTTP API for 升压一体机 projects, mounted under /api/boost."""
+
 from __future__ import annotations
 
 import hashlib
@@ -11,7 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -32,13 +33,13 @@ XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 
 class BoostProjectCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=200)
+    name: str = Field(default="", max_length=200)
     description: str = Field(default="", max_length=5000)
 
 
 class BoostProjectUpdate(BaseModel):
     revision: int
-    name: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str | None = Field(default=None, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     document_number: str | None = Field(default=None, max_length=100)
     document_version: str | None = Field(default=None, max_length=30)
@@ -122,13 +123,17 @@ def download_input_template(
     path = settings.template_dir / "input-template.xlsx"
     if not path.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "标准填写模板不存在")
-    return FileResponse(path, media_type=XLSX_MEDIA_TYPE, filename="升压一体机测试项分类表-标准模板.xlsx")
+    return FileResponse(
+        path, media_type=XLSX_MEDIA_TYPE, filename="升压一体机测试项分类表-标准模板.xlsx"
+    )
 
 
 @router.get("/projects")
 def list_projects(db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[dict]:
     rows = db.scalars(
-        select(BoostProject).where(BoostProject.created_by == user.id).order_by(BoostProject.updated_at.desc())
+        select(BoostProject)
+        .where(BoostProject.created_by == user.id)
+        .order_by(BoostProject.updated_at.desc())
     ).all()
     return [service.project_payload(db, row) for row in rows]
 
@@ -143,17 +148,31 @@ def create_project(
     template = service.current_template(db, settings)
     if template is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "升压一体机模板尚未初始化")
-    project = BoostProject(template_id=template.id, name=payload.name, description=payload.description, created_by=user.id)
+    project = BoostProject(
+        template_id=template.id,
+        name=payload.name.strip(),
+        description=payload.description,
+        created_by=user.id,
+    )
     db.add(project)
     db.flush()
-    db.add(AuditEvent(actor_user_id=user.id, action="boost_project.create", resource_type="boost_project", resource_id=project.id))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_project.create",
+            resource_type="boost_project",
+            resource_id=project.id,
+        )
+    )
     db.commit()
     db.refresh(project)
     return service.project_payload(db, project)
 
 
 @router.get("/projects/{project_id}")
-def get_project(project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
+def get_project(
+    project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> dict:
     return service.project_payload(db, _project_or_404(db, project_id, user))
 
 
@@ -174,10 +193,17 @@ def update_project(
         if problems:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "；".join(problems))
     for key, value in values.items():
-        setattr(project, key, value)
+        setattr(project, key, value.strip() if key == "name" else value)
     project.revision += 1
-    db.add(AuditEvent(actor_user_id=user.id, action="boost_project.update", resource_type="boost_project",
-                      resource_id=project.id, details={"fields": sorted(values)}))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_project.update",
+            resource_type="boost_project",
+            resource_id=project.id,
+            details={"fields": sorted(values)},
+        )
+    )
     db.commit()
     db.refresh(project)
     return service.project_payload(db, project)
@@ -192,7 +218,8 @@ async def upload_source_file(
     settings: Settings = Depends(get_settings),
     boost: BoostSettings = Depends(get_boost_settings),
 ) -> dict:
-    _project_or_404(db, project_id, user)
+    project = _project_or_404(db, project_id, user)
+    starting_revision = project.revision
     filename = Path(file.filename or "workbook.xlsx").name[:255]
     if not filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "请上传 .xlsx 格式的测试项分类表")
@@ -231,36 +258,61 @@ async def upload_source_file(
         uploaded_by=user.id,
     )
     db.add(row)
-    db.add(AuditEvent(actor_user_id=user.id, action="boost_source_file.upload", resource_type="boost_project",
-                      resource_id=project_id, details={"source_file_id": file_id, "status": row.status, **row.summary}))
+    changed = db.execute(
+        update(BoostProject)
+        .where(BoostProject.id == project_id, BoostProject.revision == starting_revision)
+        .values(revision=starting_revision + 1)
+    )
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, "项目已被其他操作更新，请重新上传")
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_source_file.upload",
+            resource_type="boost_project",
+            resource_id=project_id,
+            details={"source_file_id": file_id, "status": row.status, **row.summary},
+        )
+    )
     db.commit()
     db.refresh(row)
     return service.source_file_payload(row)
 
 
 @router.get("/projects/{project_id}/source-file")
-def get_source_file(project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict | None:
+def get_source_file(
+    project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> dict | None:
     _project_or_404(db, project_id, user)
     row = service.latest_source_file(db, project_id)
     return service.source_file_payload(row) if row is not None else None
 
 
 @router.get("/source-files/{file_id}/images/{image_id}")
-def source_file_image(file_id: str, image_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> FileResponse:
+def source_file_image(
+    file_id: str, image_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> FileResponse:
     row = _source_or_404(db, file_id, user)
     refs = BoostDocument.from_dict(row.document).image_refs() if row.document else []
     ref = next((item for item in refs if item.id == image_id), None)
     if ref is None or not Path(ref.path).is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "图片不存在")
-    return FileResponse(ref.path, media_type="image/png" if ref.path.lower().endswith(".png") else "image/jpeg")
+    return FileResponse(
+        ref.path, media_type="image/png" if ref.path.lower().endswith(".png") else "image/jpeg"
+    )
 
 
 @router.get("/source-files/{file_id}/original")
-def source_file_original(file_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> FileResponse:
+def source_file_original(
+    file_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> FileResponse:
     row = _source_or_404(db, file_id, user)
     if not Path(row.original_path).is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "原始文件不存在")
-    return FileResponse(row.original_path, media_type=XLSX_MEDIA_TYPE, filename=row.original_filename)
+    return FileResponse(
+        row.original_path, media_type=XLSX_MEDIA_TYPE, filename=row.original_filename
+    )
 
 
 @router.get("/projects/{project_id}/preflight")
@@ -285,15 +337,25 @@ def create_generation(
     project = _project_or_404(db, project_id, user)
     template = db.get(Template, project.template_id)
     if settings.env == "production" and (template is None or template.status != "approved"):
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "生产生成前必须完成升压一体机母版人工复核并标记为 approved")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "生产生成前必须完成升压一体机母版人工复核并标记为 approved",
+        )
     if template is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "升压一体机模板尚未初始化")
     check = service.preflight(db, project, boost)
     if check["blockers"]:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "；".join(item["message"] for item in check["blockers"]))
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "；".join(item["message"] for item in check["blockers"]),
+        )
     if check["warnings"] and not payload.allow_warnings:
         raise HTTPException(status.HTTP_409_CONFLICT, "测试项分类表存在提醒，请确认后继续")
-    existing = db.scalar(select(BoostGenerationTask).where(BoostGenerationTask.idempotency_key == payload.idempotency_key))
+    existing = db.scalar(
+        select(BoostGenerationTask).where(
+            BoostGenerationTask.idempotency_key == payload.idempotency_key
+        )
+    )
     if existing:
         return _task_payload(existing)
     source = service.latest_source_file(db, project.id)
@@ -306,19 +368,32 @@ def create_generation(
         events=[],
     )
     db.add(task)
-    db.add(AuditEvent(actor_user_id=user.id, action="boost_generation.enqueue", resource_type="boost_project", resource_id=project.id))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_generation.enqueue",
+            resource_type="boost_project",
+            resource_id=project.id,
+        )
+    )
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        existing = db.scalar(select(BoostGenerationTask).where(BoostGenerationTask.idempotency_key == payload.idempotency_key))
+        existing = db.scalar(
+            select(BoostGenerationTask).where(
+                BoostGenerationTask.idempotency_key == payload.idempotency_key
+            )
+        )
         return _task_payload(existing)
     db.refresh(task)
     return _task_payload(task)
 
 
 @router.get("/generations/{task_id}")
-def get_generation(task_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> dict:
+def get_generation(
+    task_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> dict:
     task = db.get(BoostGenerationTask, task_id)
     if task is None or not _owned(db, task.project_id, user):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "生成任务不存在")
@@ -326,30 +401,44 @@ def get_generation(task_id: str, db: Session = Depends(get_db), user: User = Dep
 
 
 @router.get("/projects/{project_id}/documents")
-def list_documents(project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> list[dict]:
+def list_documents(
+    project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> list[dict]:
     _project_or_404(db, project_id, user)
     documents = db.scalars(
-        select(BoostGeneratedDocument).where(BoostGeneratedDocument.project_id == project_id)
+        select(BoostGeneratedDocument)
+        .where(BoostGeneratedDocument.project_id == project_id)
         .order_by(BoostGeneratedDocument.created_at.desc())
     ).all()
     return [
-        {"id": doc.id, "task_id": doc.task_id, "file_sha256": doc.file_sha256, "created_at": utc_iso(doc.created_at),
-         "download_url": f"/api/boost/documents/{doc.id}/download"}
+        {
+            "id": doc.id,
+            "task_id": doc.task_id,
+            "file_sha256": doc.file_sha256,
+            "created_at": utc_iso(doc.created_at),
+            "download_url": f"/api/boost/documents/{doc.id}/download",
+        }
         for doc in documents
     ]
 
 
 @router.get("/documents/{document_id}/download")
-def download_document(document_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)) -> FileResponse:
+def download_document(
+    document_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> FileResponse:
     document = db.get(BoostGeneratedDocument, document_id)
-    if document is None or not _owned(db, document.project_id, user) or not Path(document.file_path).is_file():
+    if (
+        document is None
+        or not _owned(db, document.project_id, user)
+        or not Path(document.file_path).is_file()
+    ):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "生成文档不存在")
     project = db.get(BoostProject, document.project_id)
     local = as_utc(document.created_at).astimezone(ZoneInfo(get_settings().display_timezone))
     return FileResponse(
         document.file_path,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"{project.name if project else '升压一体机'}-{local:%Y%m%d-%H%M%S}.docx",
+        filename=f"{document.snapshot.get('fields', {}).get('document_title') or (project.name if project else '') or '升压一体机'}-{local:%Y%m%d-%H%M%S}.docx",
     )
 
 
@@ -368,7 +457,14 @@ def approve_template(
     if actual != template.master_sha256:
         raise HTTPException(status.HTTP_409_CONFLICT, "母版哈希与已登记版本不一致")
     template.status = "approved"
-    db.add(AuditEvent(actor_user_id=user.id, action="boost_template.approve", resource_type="template",
-                      resource_id=template.id, details={"master_sha256": actual}))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_template.approve",
+            resource_type="template",
+            resource_id=template.id,
+            details={"master_sha256": actual},
+        )
+    )
     db.commit()
     return {"id": template.id, "status": template.status, "master_sha256": actual}

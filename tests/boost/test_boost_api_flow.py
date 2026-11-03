@@ -21,7 +21,9 @@ def test_boost_project_flow(tmp_path: Path, monkeypatch):
         headers = {"X-CSRF-Token": login.json()["csrf_token"]}
 
         boost_config = client.get("/api/boost/config").json()
-        assert boost_config["available"] and boost_config["template_status"] == "approved"
+        assert boost_config["available"] and boost_config["template_status"] in ("approved", "review_required")
+        # Test-only review; production approval still requires business review.
+        assert client.post("/api/boost/admin/template/approve", headers=headers).status_code == 200
         assert {field["key"] for field in boost_config["fields"]} >= {"project_name", "document_number", "drafter"}
         assert boost_config["input_template_available"]
         template = client.get("/api/boost/input-template")
@@ -114,3 +116,37 @@ def test_boost_project_flow(tmp_path: Path, monkeypatch):
 
         approved = client.post("/api/boost/admin/template/approve", headers=headers)
         assert approved.status_code == 200 and approved.json()["status"] == "approved"
+
+        # New home-driven projects need no duplicate web metadata.
+        from openpyxl import load_workbook
+        from io import BytesIO
+        home_project = client.post("/api/boost/projects", json={}, headers=headers).json()
+        standard = load_workbook(BytesIO(template.content))
+        standard["首页"]["C52"] = "HOME-API-001"
+        stream = BytesIO()
+        standard.save(stream)
+        home_source = client.post(f"/api/boost/projects/{home_project['id']}/source-file",
+                                 files={"file": ("首页.xlsx", stream.getvalue())}, headers=headers)
+        assert home_source.status_code == 201 and home_source.json()["status"] == "parsed"
+        refreshed = client.get(f"/api/boost/projects/{home_project['id']}").json()
+        assert refreshed["revision"] == home_project["revision"] + 1
+        assert refreshed["name"] == standard["首页"]["A1"].value
+        assert refreshed["resolved_fields"]["document_number"] == "HOME-API-001"
+        assert refreshed["field_sources"]["document_title"]["cell"] == "首页!A1"
+        assert client.get(f"/api/boost/projects/{home_project['id']}/preflight").json()["ready"]
+
+        # A changed master must revoke old manual approval, even with no approval key.
+        from app.db import SessionLocal
+        from app.models import Template
+        from app.boost.bootstrap import bootstrap_boost
+        with SessionLocal.begin() as db:
+            row = db.get(Template, boost_config["template_id"])
+            row.master_sha256 = "0" * 64
+            row.status = "approved"
+        from app.boost.settings import load_manifest, get_boost_settings
+        unreviewed = dict(load_manifest(get_boost_settings().template_dir))
+        unreviewed.pop("approved_master_sha256", None)
+        monkeypatch.setattr("app.boost.bootstrap.load_manifest", lambda _: unreviewed)
+        bootstrap_boost()
+        with SessionLocal() as db:
+            assert db.get(Template, boost_config["template_id"]).status == "review_required"

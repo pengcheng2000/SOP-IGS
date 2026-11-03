@@ -17,6 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from .api import admin, advice, auth, generation, photos, projects
 from .boost.api import router as boost_router
 from .boost.bootstrap import bootstrap_boost
+from .cabinet_plan.bootstrap import bootstrap_cabinet_plan
+from .cabinet_plan.api import router as cabinet_plan_router
 from .bootstrap import bootstrap
 from .config import REPOSITORY_ROOT, get_settings
 from .db import engine
@@ -46,6 +48,7 @@ async def lifespan(app: FastAPI):
     del app
     bootstrap()
     bootstrap_boost()
+    bootstrap_cabinet_plan()
     yield
 
 
@@ -119,6 +122,7 @@ app.include_router(photos.router, prefix="/api")
 app.include_router(advice.router, prefix="/api")
 app.include_router(generation.router, prefix="/api")
 app.include_router(boost_router, prefix="/api")
+app.include_router(cabinet_plan_router, prefix="/api")
 
 frontend_dist = REPOSITORY_ROOT / "frontend" / "dist"
 if frontend_dist.is_dir():

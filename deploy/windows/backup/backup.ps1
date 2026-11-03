@@ -6,7 +6,12 @@ $ErrorActionPreference = "Stop"
 $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $Destination = Join-Path $BackupRoot $Stamp
 New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-Copy-Item -LiteralPath (Join-Path $DataRoot "outputs") -Destination $Destination -Recurse
-Copy-Item -LiteralPath (Join-Path $DataRoot "originals") -Destination $Destination -Recurse
+foreach ($Folder in @("outputs", "originals", "processed", "boost", "cabinet_plan")) {
+    $Source = Join-Path $DataRoot $Folder
+    if (Test-Path -LiteralPath $Source) {
+        Copy-Item -LiteralPath $Source -Destination $Destination -Recurse
+    }
+}
 pg_dump --format=custom --file=(Join-Path $Destination "sop-igs.dump") sop_igs
+if ($LASTEXITCODE -ne 0) { throw "pg_dump failed: $LASTEXITCODE" }
 

@@ -9,22 +9,22 @@ import type { BoostDocumentRecord, BoostPreflight, BoostProject, BoostTask } fro
 
 const { Title, Text } = Typography;
 
-export default function BoostGenerationPanel({ project, isAdmin }: { project: BoostProject; isAdmin: boolean }) {
+export default function BoostGenerationPanel({ project, isAdmin, apiBase = "/api/boost", queryPrefix = "boost", sourceLabel = "测试项分类表" }: { project: Pick<BoostProject, "id" | "revision">; isAdmin: boolean; apiBase?: string; queryPrefix?: string; sourceLabel?: string }) {
   const { message } = AntApp.useApp();
   const [taskId, setTaskId] = useState<string>();
   const [warningsAccepted, setWarningsAccepted] = useState(false);
   const preflight = useQuery({
-    queryKey: ["boost-preflight", project.id],
-    queryFn: () => api<BoostPreflight>(`/api/boost/projects/${project.id}/preflight`),
+    queryKey: [`${queryPrefix}-preflight`, project.id],
+    queryFn: () => api<BoostPreflight>(`${apiBase}/projects/${project.id}/preflight`),
     refetchInterval: 5000
   });
   const documents = useQuery({
-    queryKey: ["boost-documents", project.id],
-    queryFn: () => api<BoostDocumentRecord[]>(`/api/boost/projects/${project.id}/documents`)
+    queryKey: [`${queryPrefix}-documents`, project.id],
+    queryFn: () => api<BoostDocumentRecord[]>(`${apiBase}/projects/${project.id}/documents`)
   });
   const task = useQuery({
-    queryKey: ["boost-task", taskId],
-    queryFn: () => api<BoostTask>(`/api/boost/generations/${taskId}`),
+    queryKey: [`${queryPrefix}-task`, taskId],
+    queryFn: () => api<BoostTask>(`${apiBase}/generations/${taskId}`),
     enabled: Boolean(taskId),
     refetchInterval: (query) => ["succeeded", "failed"].includes(query.state.data?.status ?? "") ? false : 1000
   });
@@ -34,7 +34,7 @@ export default function BoostGenerationPanel({ project, isAdmin }: { project: Bo
   useEffect(() => setWarningsAccepted(false), [preflight.data?.warnings.length]);
 
   const generate = useMutation({
-    mutationFn: () => api<BoostTask>(`/api/boost/projects/${project.id}/generations`, {
+    mutationFn: () => api<BoostTask>(`${apiBase}/projects/${project.id}/generations`, {
       method: "POST",
       body: JSON.stringify({ idempotency_key: `${project.id}-${project.revision}-${Date.now()}`, allow_warnings: warningsAccepted })
     }),
@@ -51,7 +51,7 @@ export default function BoostGenerationPanel({ project, isAdmin }: { project: Bo
       <Col xs={24} lg={15}>
         <Card className="workspace-card" bordered={false}>
           <div className="section-heading">
-            <div><Title level={3}>生成前检查</Title><Text type="secondary">必填字段缺失或分类表有错误会阻止生成；提醒需要明确确认。</Text></div>
+            <div><Title level={3}>生成前检查</Title><Text type="secondary">必填字段缺失或{sourceLabel}有错误会阻止生成；提醒需要明确确认。</Text></div>
             {preflight.data?.ready ? <Tag color="success" icon={<CheckCircleFilled />}>检查通过</Tag> : <Tag color="error">需要处理</Tag>}
           </div>
           <Row gutter={16} className="preflight-stats">
@@ -63,7 +63,7 @@ export default function BoostGenerationPanel({ project, isAdmin }: { project: Bo
           {preflight.data?.warnings.map((item) => <Alert key={item.code} type="warning" showIcon message={item.message} />)}
           {preflight.data?.warning_confirmation_required && (
             <Checkbox className="warning-confirm" checked={warningsAccepted} onChange={(event) => setWarningsAccepted(event.target.checked)}>
-              我已确认测试项分类表中的提醒，仍继续生成本次 DOCX
+              我已确认{sourceLabel}中的提醒，仍继续生成本次 DOCX
             </Checkbox>
           )}
           <Button type="primary" size="large" icon={<FileWordOutlined />} disabled={!canGenerate} loading={generate.isPending} onClick={() => generate.mutate()}>生成 DOCX</Button>

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { api, uploadWithProgress } from "../../api";
 import { formatLocalDateTime } from "../../time";
 import type { BoostConfig, BoostProject, ParseIssue, SourceFile } from "./types";
-import SourcePreview from "./SourcePreview";
+import SourcePreview, { PreviewItem } from "./SourcePreview";
 
 const { Title, Text } = Typography;
 
@@ -71,7 +71,7 @@ export default function SourceFileStep({ project, config, onChanged }: { project
   return (
     <Card className="workspace-card" bordered={false}>
       <div className="section-heading">
-        <div><Title level={3}>测试项分类表</Title><Text type="secondary">每个工作表生成一个 5.x 章节；A 列为三级标题，J 列「格式」决定标题、列表、表格和注意事项。</Text></div>
+        <div><Title level={3}>测试项分类表</Title><Text type="secondary">首页填写基础信息与第1～4章内容；测试工作表生成 5.x 章节。修改信息请编辑 Excel 后重新上传。</Text></div>
       </div>
       {config.input_template_available && (
         <div className="template-banner">
@@ -111,6 +111,12 @@ export default function SourceFileStep({ project, config, onChanged }: { project
             ]}
           />
           <IssueList issues={current.issues} templateAvailable={config.input_template_available} />
+          {current.document?.extra?.fields && <>
+            <Descriptions title="首页信息（从 Excel 读取）" bordered column={{xs:1,md:2}} items={Object.entries(current.document.extra.fields).map(([key,entry]) => ({key,label: config.fields.find(f => f.key === key)?.label ?? key,children: <div style={{whiteSpace:"pre-wrap"}}>{entry.value || "未填写"}<div><Text type="secondary">{entry.source}</Text></div></div>}))} />
+            <div>{current.document.extra.references?.map((line,i) => <p key={i}>{line}</p>)}</div>
+            {current.document.extra.environment && <PreviewItem item={current.document.extra.environment} />}
+            {current.document.extra.instruments && <PreviewItem item={current.document.extra.instruments} />}
+          </>}
           {current.document && <SourcePreview document={current.document} />}
         </div>
       )}

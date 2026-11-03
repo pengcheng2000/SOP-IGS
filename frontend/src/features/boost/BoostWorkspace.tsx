@@ -23,23 +23,23 @@ export function useBoostConfig() {
 
 export default function BoostWorkspace({ initial, onBack, isAdmin }: { initial: BoostProject; onBack: () => void; isAdmin: boolean }) {
   const [project, setProject] = useState(initial);
-  const [step, setStep] = useState("basic");
+  const [step, setStep] = useState("source");
   const config = useBoostConfig();
   return (
-    <main className="workspace-shell">
+    <main className="workspace-shell boost-workspace">
       <div className="workspace-top">
         <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>返回项目列表</Button>
-        <div><Text className="eyebrow">升压一体机 · 测试需求</Text><Title level={2}>{project.name}</Title></div>
+        <div><Text className="eyebrow">升压一体机 · 测试方案</Text><Title level={2}>{project.name}</Title></div>
         <Tag color="purple">升压一体机</Tag>
       </div>
-      <Segmented className="workspace-nav" block options={STEPS} value={step} onChange={(value) => setStep(String(value))} />
+      <Segmented className="workspace-nav" block options={project.source_file && project.field_sources?.document_title?.kind === "legacy" ? STEPS : STEPS.filter(s => s.value !== "basic").map((s,i) => ({...s,label: i === 0 ? "01 上传与信息预览" : "02 生成文档"}))} value={step} onChange={(value) => setStep(String(value))} />
       {config.isLoading ? <Skeleton active /> : !config.data?.available ? (
         <Alert type="error" showIcon message="升压一体机母版尚未部署或校验失败，请联系管理员" />
       ) : (
         <>
-          {step === "basic" && <BoostBasicInfo project={project} config={config.data} onSaved={setProject} />}
+          {step === "basic" && <BoostBasicInfo project={project} config={{...config.data, fields: config.data.fields.filter(f => !["document_title", "scope_text"].includes(f.key))}} onSaved={setProject} />}
           {step === "source" && (
-            <SourceFileStep project={project} config={config.data} onChanged={(source) => setProject((current) => ({ ...current, source_file: source }))} />
+            <SourceFileStep project={project} config={config.data} onChanged={() => { void api<BoostProject>(`/api/boost/projects/${project.id}`).then(setProject); }} />
           )}
           {step === "generate" && <BoostGenerationPanel project={project} isAdmin={isAdmin} />}
         </>

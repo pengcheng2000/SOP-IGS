@@ -12,7 +12,7 @@ function CellContent({ cell }: { cell: SourceTableCell }) {
   );
 }
 
-function PreviewItem({ item, number }: { item: SourceItem; number?: string }) {
+export function PreviewItem({ item, number, listStart = 1 }: { item: SourceItem; number?: string; listStart?: number }) {
   switch (item.type) {
     case "heading":
       return <div className={`preview-heading level-${item.level}`}><span className="preview-number">{number}</span>{item.text}</div>;
@@ -21,7 +21,7 @@ function PreviewItem({ item, number }: { item: SourceItem; number?: string }) {
     case "list": {
       const ListTag = item.style === "bullet" ? "ul" : "ol";
       return (
-        <ListTag className={`preview-list ${item.style}`}>
+        <ListTag className={`preview-list ${item.style}`} start={ListTag === "ol" ? listStart : undefined}>
           {item.items.map((entry, index) => <li key={index} className={entry.level ? "sub" : undefined}>{entry.text}</li>)}
         </ListTag>
       );
@@ -47,6 +47,18 @@ function PreviewItem({ item, number }: { item: SourceItem; number?: string }) {
   }
 }
 
+export function PreviewItems({ items, numbers = [] }: { items: SourceItem[]; numbers?: (string | undefined)[] }) {
+  const counters: Record<string, number> = {};
+  return <>{items.map((item, index) => {
+    let start = 1;
+    if (item.type === "list") {
+      start = item.continues ? (counters[item.style] ?? 0) + 1 : 1;
+      counters[item.style] = start - 1 + item.items.filter(entry => !entry.level).length;
+    }
+    return <PreviewItem key={index} item={item} number={numbers[index]} listStart={start} />;
+  })}</>;
+}
+
 function numberItems(chapterNumber: number, items: SourceItem[]): (string | undefined)[] {
   let level3 = 0;
   let level4 = 0;
@@ -62,14 +74,14 @@ function numberItems(chapterNumber: number, items: SourceItem[]): (string | unde
   });
 }
 
-export default function SourcePreview({ document }: { document: SourceDocument }) {
+export default function SourcePreview({ document, startNumber = 2 }: { document: SourceDocument; startNumber?: number }) {
   if (!document.chapters.length) return <Empty description="没有可生成的章节" />;
   return (
     <div className="source-preview">
       <Collapse
         defaultActiveKey={["0"]}
         items={document.chapters.map((chapter, index) => {
-          const chapterNumber = index + 2;
+          const chapterNumber = index + startNumber;
           const numbers = numberItems(chapterNumber, chapter.items);
           const tables = chapter.items.filter((item) => item.type === "table").length;
           return {
@@ -77,7 +89,7 @@ export default function SourcePreview({ document }: { document: SourceDocument }
             label: <span className="preview-chapter">5.{chapterNumber} {chapter.title}</span>,
             extra: <Text type="secondary">{chapter.items.length} 项{tables ? ` · ${tables} 表` : ""}</Text>,
             children: chapter.items.length
-              ? chapter.items.map((item, itemIndex) => <PreviewItem key={itemIndex} item={item} number={numbers[itemIndex]} />)
+              ? <PreviewItems items={chapter.items} numbers={numbers} />
               : <Text type="secondary">此章节没有内容，只生成标题</Text>
           };
         })}

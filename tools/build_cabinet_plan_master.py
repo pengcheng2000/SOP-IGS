@@ -305,18 +305,21 @@ def build(source: Path, out: Path):
 
     for token in ["{{HOME_CONTENT}}"]:
         package.body.append(p(token))
-    # Rebuild the case title block on one consistent grid; the original has
-    # incompatible row widths and side labels stored in floating text boxes.
+    # Rebuild the case title block on one consistent 12-column grid that follows the
+    # workbook's 首页 layout: the revision row (A0 / 新归档 / date) at the left, an empty
+    # spacer row, and the 版本/更改方式/更改单号/日期 header at the right.
+    # Column weights follow the case's cell widths, with the right block's header cells
+    # widened (total unchanged) so 更改方式 and 更改单号 stay on one line.
+    column_weights = (295, 261, 508, 530, 257, 257, 570, 429, 330, 500, 500, 557)
+    revision_values = ["{{document_version}}", "/", "新归档", "{{archive_month}}"]
+    header_values = ["版本", "更改方式", "更改单号", "日期"]
     rows = [
         tuple(
-            TableCell(v, i * 3, 3)
-            for i, v in enumerate(
-                ["{{document_version}}", "/", "新归档", "{{archive_month}}"]
-            )
+            TableCell(revision_values[i] if i < 4 else "", i, 1) for i in range(12)
         ),
+        tuple(TableCell("", i, 1) for i in range(12)),
         tuple(
-            TableCell(v, i * 3, 3)
-            for i, v in enumerate(["版本", "更改方式", "更改单号", "日期"])
+            TableCell(header_values[i - 8] if i >= 8 else "", i, 1) for i in range(12)
         ),
         (
             TableCell("拟制", 0, 2),
@@ -364,10 +367,10 @@ def build(source: Path, out: Path):
         prototypes,
         body_proto,
     )
-    approval = renderer.table(Table((1,) * 12, tuple(rows), 0))
+    approval = renderer.table(Table(column_weights, tuple(rows), 0))
     for cell in approval.xpath(".//w:tc", namespaces=NS):
         set_prop(cell.find("w:tcPr", NS), "vAlign", val="center")
-    page_cell = approval.findall("w:tr", NS)[5].findall("w:tc", NS)[3]
+    page_cell = approval.findall("w:tr", NS)[6].findall("w:tc", NS)[3]
     page_p = page_cell.find("w:p", NS)
     for n in list(page_p):
         if n.tag != q("w", "pPr"):
@@ -377,7 +380,7 @@ def build(source: Path, out: Path):
     E.SubElement(E.SubElement(page_p, q("w", "r")), q("w", "t")).text = " 页 共 "
     field(page_p, "NUMPAGES")
     E.SubElement(E.SubElement(page_p, q("w", "r")), q("w", "t")).text = " 页"
-    company = approval.findall("w:tr", NS)[2].findall("w:tc", NS)[3]
+    company = approval.findall("w:tr", NS)[3].findall("w:tc", NS)[3]
     logo_data = package.entries.get("word/media/image1.png")
     if logo_data:
         with tempfile.TemporaryDirectory() as temp:

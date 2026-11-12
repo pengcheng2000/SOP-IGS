@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from ..config import Settings, get_settings
 from ..db import get_db
 from ..domain.catalog import BY_ID, LEAF_IDS, display_numbers, tree_payload
 from ..models import (
+    AIAdvice,
     AuditEvent,
+    DocumentGenerationTask,
+    DocumentTaskEvent,
+    GeneratedDocument,
     Photo,
     PhotoGroup,
     Project,
@@ -17,6 +22,7 @@ from ..models import (
 )
 from ..schemas import ProjectCreate, ProjectUpdate, SelectionUpdate, TestResultNoteUpdate
 from ..services.photo_groups import ensure_project_photo_groups, group_photo_counts
+from ..services.project_cleanup import ensure_no_active_generation, remove_project_dirs
 from ..time_utils import utc_iso
 from .deps import current_user, require_csrf
 
@@ -128,6 +134,41 @@ def get_project(
     user: User = Depends(current_user),
 ) -> dict:
     return project_payload(db, get_project_or_404(db, project_id, user))
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_csrf),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    project = get_project_or_404(db, project_id, user)
+    ensure_no_active_generation(db, DocumentGenerationTask, project_id)
+    task_ids = select(DocumentGenerationTask.id).where(DocumentGenerationTask.project_id == project_id)
+    group_ids = select(PhotoGroup.id).where(PhotoGroup.project_id == project_id)
+    # SQLite development databases do not enforce ON DELETE CASCADE, so delete children explicitly.
+    db.execute(delete(DocumentTaskEvent).where(DocumentTaskEvent.task_id.in_(task_ids)))
+    db.execute(delete(GeneratedDocument).where(GeneratedDocument.project_id == project_id))
+    db.execute(delete(DocumentGenerationTask).where(DocumentGenerationTask.project_id == project_id))
+    db.execute(delete(Photo).where(Photo.photo_group_id.in_(group_ids)))
+    db.execute(delete(PhotoGroup).where(PhotoGroup.project_id == project_id))
+    db.execute(delete(ProjectTestItem).where(ProjectTestItem.project_id == project_id))
+    db.execute(delete(AIAdvice).where(AIAdvice.project_id == project_id))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="project.delete",
+            resource_type="project",
+            resource_id=project_id,
+            details={"name": project.name},
+        )
+    )
+    db.delete(project)
+    db.commit()
+    remove_project_dirs(
+        project_id, [settings.originals_dir, settings.processed_dir, settings.outputs_dir]
+    )
 
 
 @router.patch("/projects/{project_id}")

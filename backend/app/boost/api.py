@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from ..api.deps import current_user, require_csrf
 from ..config import Settings, get_settings
 from ..db import get_db
 from ..models import AuditEvent, Template, User
+from ..services.project_cleanup import ensure_no_active_generation, remove_project_dirs
 from ..storage import LocalBlobStore
 from ..time_utils import as_utc, utc_iso
 from . import service
@@ -174,6 +175,33 @@ def get_project(
     project_id: str, db: Session = Depends(get_db), user: User = Depends(current_user)
 ) -> dict:
     return service.project_payload(db, _project_or_404(db, project_id, user))
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_csrf),
+    plan: BoostSettings = Depends(get_boost_settings),
+) -> None:
+    project = _project_or_404(db, project_id, user)
+    ensure_no_active_generation(db, BoostGenerationTask, project_id)
+    # SQLite development databases do not enforce ON DELETE CASCADE, so delete children explicitly.
+    db.execute(delete(BoostGeneratedDocument).where(BoostGeneratedDocument.project_id == project_id))
+    db.execute(delete(BoostGenerationTask).where(BoostGenerationTask.project_id == project_id))
+    db.execute(delete(BoostSourceFile).where(BoostSourceFile.project_id == project_id))
+    db.add(
+        AuditEvent(
+            actor_user_id=user.id,
+            action="boost_project.delete",
+            resource_type="boost_project",
+            resource_id=project_id,
+            details={"name": project.name},
+        )
+    )
+    db.delete(project)
+    db.commit()
+    remove_project_dirs(project_id, [plan.sources_dir, plan.outputs_dir])
 
 
 @router.patch("/projects/{project_id}")

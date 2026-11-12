@@ -37,6 +37,7 @@ import { api, ApiError, setCsrfToken } from "./api";
 import BrandLogo from "./components/BrandLogo";
 import CreateProjectDialog from "./components/CreateProjectDialog";
 import FeishuQrLogin from "./components/FeishuQrLogin";
+import ProjectDeleteButton from "./components/ProjectDeleteButton";
 import TestPeriodInput from "./components/TestPeriodInput";
 import BoostProjectCard from "./features/boost/BoostProjectCard";
 import BoostWorkspace, { useBoostConfig } from "./features/boost/BoostWorkspace";
@@ -176,12 +177,12 @@ function ProjectList({ onOpen, onOpenBoost, onOpenPlan }: { onOpen: (project: Pr
       {projects.isLoading || boostProjects.isLoading || planProjects.isLoading ? <Skeleton active /> : listItems.length ? (
         <Row gutter={[18, 18]}>
           {listItems.map((item) => item.kind === "cabinet-plan" ? (
-            <Col xs={24} lg={12} xl={8} key={`plan-${item.project.id}`}><CabinetPlanCard project={item.project} onOpen={onOpenPlan} /></Col>
+            <Col xs={24} lg={12} xl={8} key={`plan-${item.project.id}`}><CabinetPlanCard project={item.project} onOpen={onOpenPlan} onDeleted={() => queryClient.invalidateQueries({ queryKey: ["cabinet-plan-projects"] })} /></Col>
           ) : item.kind === "boost" ? (
-            <Col xs={24} lg={12} xl={8} key={item.project.id}><BoostProjectCard project={item.project} onOpen={onOpenBoost} /></Col>
+            <Col xs={24} lg={12} xl={8} key={item.project.id}><BoostProjectCard project={item.project} onOpen={onOpenBoost} onDeleted={() => queryClient.invalidateQueries({ queryKey: ["boost-projects"] })} /></Col>
           ) : (
             <Col xs={24} lg={12} xl={8} key={item.project.id}>
-              <Card className="project-card" hoverable onClick={() => onOpen(item.project)}>
+              <Card className="project-card" hoverable onClick={() => onOpen(item.project)} actions={[<ProjectDeleteButton key="delete" name={item.project.name} path={`/api/projects/${item.project.id}`} onDeleted={() => queryClient.invalidateQueries({ queryKey: ["projects"] })} />]}>
                 <div className="project-card-head"><div className="project-icon"><FolderOpenOutlined /></div><Space size={4}><Tag color="blue">工商业柜</Tag><Tag>测试报告</Tag><Tag color={item.project.status === "active" ? "green" : "default"}>{item.project.status === "active" ? "进行中" : item.project.status}</Tag></Space></div>
                 <Title level={4}>{item.project.name}</Title>
                 <Paragraph ellipsis={{ rows: 2 }}>{item.project.description || "尚未填写项目说明"}</Paragraph>

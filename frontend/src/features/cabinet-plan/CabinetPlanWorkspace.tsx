@@ -4,6 +4,7 @@ import { Alert, App, Button, Card, Col, Collapse, DatePicker, Descriptions, Form
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { api, uploadWithProgress } from "../../api";
+import ProjectDeleteButton from "../../components/ProjectDeleteButton";
 import BoostGenerationPanel from "../boost/BoostGenerationPanel";
 import SourcePreview, { PreviewItem, PreviewItems } from "../boost/SourcePreview";
 import type { SourceFile } from "../boost/types";
@@ -17,8 +18,8 @@ export function useCabinetPlanConfig() {
   return useQuery({ queryKey: ["cabinet-plan-config"], queryFn: () => api<CabinetPlanConfig>(`${BASE}/config`), staleTime: 60_000 });
 }
 
-export function CabinetPlanCard({ project, onOpen }: { project: CabinetPlanProject; onOpen: (p: CabinetPlanProject) => void }) {
-  return <Card className="project-card" hoverable onClick={() => onOpen(project)}>
+export function CabinetPlanCard({ project, onOpen, onDeleted }: { project: CabinetPlanProject; onOpen: (p: CabinetPlanProject) => void; onDeleted: () => void }) {
+  return <Card className="project-card" hoverable onClick={() => onOpen(project)} actions={[<ProjectDeleteButton key="delete" name={project.name} path={`${BASE}/projects/${project.id}`} onDeleted={onDeleted} />]}>
     <div className="project-card-head"><div className="project-icon"><FileExcelOutlined /></div><Space size={4}><Tag color="blue">工商业柜</Tag><Tag color="cyan">测试方案</Tag></Space></div>
     <Title level={4}>{project.name}</Title><Paragraph ellipsis={{ rows: 2 }}>{project.description || "编辑 Excel，一键生成测试方案"}</Paragraph>
     <div className="project-stats"><span><b>{project.source_file?.chapter_count ?? 0}</b> 章节</span><span><b>{project.source_file?.image_count ?? 0}</b> 图片</span><span>{project.source_file ? project.source_file.status === "parsed" ? "已解析" : "需修正 Excel" : "待上传 Excel"}</span></div>
@@ -87,7 +88,7 @@ function SourceStep({ project, onChanged }: { project: CabinetPlanProject; onCha
   const document = current?.document;
   return <Card className="workspace-card" bordered={false}>
     <div className="section-heading"><div><Title level={3}>上传测试需求</Title><Text type="secondary">使用工商业柜标准模板，在 Excel 中完成测试内容取舍。上传后预览章节并检查信息。</Text></div></div>
-    <div className="template-banner"><div><h4>工商业柜测试方案标准模板</h4><p>保留首页和目录示意，已标注标题、列表与表格格式；请阅读填写说明和内容核对。</p></div><Button type="primary" icon={<DownloadOutlined />} href={`${BASE}/input-template`}>下载标准模板</Button></div>
+    <div className="template-banner"><div><h4>工商业柜测试方案标准模板</h4><p>保留首页示意，每个测试工作表即一个章节（工作表名称为章节标题），已标注列表与表格格式；请阅读填写说明和内容核对。</p></div><Button type="primary" icon={<DownloadOutlined />} href={`${BASE}/input-template`}>下载标准模板</Button></div>
     <Upload.Dragger accept=".xlsx" showUploadList={false} disabled={Boolean(progress)} beforeUpload={file => { void upload(file); return false; }}>
       <p className="ant-upload-drag-icon"><CloudUploadOutlined /></p><p className="ant-upload-text">{current ? "上传新的 Excel，替换当前输入版本" : "拖入或点击上传测试需求 Excel"}</p><p className="ant-upload-hint">A–N 列内容，O 列格式，P 列以后为填写说明；网页无需重复填写 Excel 已有信息。</p>
     </Upload.Dragger>

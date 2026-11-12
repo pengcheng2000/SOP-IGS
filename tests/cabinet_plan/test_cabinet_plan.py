@@ -15,6 +15,7 @@ from app.document_common.validation import validate_docx
 from fastapi.testclient import TestClient
 from lxml import etree
 from openpyxl import load_workbook
+from sqlalchemy import func, select
 
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "templates/cabinet-test-plan/v1/input-template.xlsx"
@@ -54,27 +55,30 @@ def test_full_template_retains_content_and_excludes_instructions(tmp_path):
     assert "8小时" in text
     assert "2026年9月2日" not in text  # generated revision date owns this slot
     assert {i.cell for i in result.issues if i.code == "SOURCE_CONTENT_REVIEW"} == {
-        "D9",
-        "E25",
+        "D7",
+        "E23",
     }
+    # Chapter titles are the sheet names; the workbook has no 目录 page or title rows.
+    assert [c.title for c in document.chapters][:3] == ["外观检查", "机械强度测试", "防水测试"]
+    assert "目录" not in load_workbook(TEMPLATE, read_only=True).sheetnames
     assert len(DocumentModel.from_dict(document.to_dict()).image_refs()) == 1
     assert DocumentModel.from_dict(document.to_dict()).extra == document.extra
 
 
 def test_delete_reorder_rename_and_level_four(tmp_path):
     def change(book):
-        for s in list(book):
-            if "、" in s.title and not s.title.startswith(("1、", "16、", "17、")):
-                del book[s.title]
-        sheet = book["16、UPS相关测试"]
+        for name in book.sheetnames[2:18]:
+            if name not in {"外观检查", "UPS相关测试"}:
+                del book[name]
+        sheet = book["UPS相关测试"]
         book.move_sheet(sheet, offset=-1)
         sheet.title = "UPS最终方案"
-        sheet["A8"] = "5.16.1.1 自动关机测试"
-        sheet["O8"] = "四级标题+段落"
+        sheet["A6"] = "5.16.1.1 自动关机测试"
+        sheet["O6"] = "四级标题+段落"
 
     result = parse(modified(tmp_path, change), tmp_path)
     assert result.valid, result.issues
-    assert {c.title for c in result.document.chapters} == {"外观检查", "UPS配置和测试"}
+    assert [c.title for c in result.document.chapters] == ["UPS最终方案", "外观检查"]
     assert any(
         isinstance(i, Heading) and i.level == 4
         for c in result.document.chapters
@@ -84,9 +88,9 @@ def test_delete_reorder_rename_and_level_four(tmp_path):
 
 def test_invalid_format_and_orphan_heading_are_located(tmp_path):
     def change(book):
-        sheet = book["1、外观检查"]
-        sheet["O3"] = "四级标题+段落"
-        sheet["O4"] = "凭颜色识别"
+        sheet = book["外观检查"]
+        sheet["O1"] = "四级标题+段落"
+        sheet["O2"] = "凭颜色识别"
 
     result = parse(modified(tmp_path, change), tmp_path)
     assert not result.valid
@@ -121,27 +125,24 @@ def test_missing_binding_and_legacy_rejected(tmp_path):
 
 def test_uncalculated_formula_does_not_silently_drop_content(tmp_path):
     def change(book):
-        book["3、防水测试"]["A3"] = '=CONCAT("测试", "内容")'
+        book["防水测试"]["A1"] = '=CONCAT("测试", "内容")'
 
     result = parse(modified(tmp_path, change), tmp_path)
     assert not result.valid
     assert any(
-        i.code == "FORMULA_NOT_CALCULATED" and i.cell == "A3" for i in result.issues
+        i.code == "FORMULA_NOT_CALCULATED" and i.cell == "A1" for i in result.issues
     )
 
 
 def test_new_table_can_start_in_column_a(tmp_path):
     def change(book):
-        sheet = book.create_sheet("新增测试")
-        sheet["O1"] = "格式"
-        sheet["A2"] = "125kW新增章节"
-        sheet["O2"] = "二级标题"
-        sheet["A3"] = "参数"
-        sheet["B3"] = "数值"
-        sheet["O3"] = "表头"
-        sheet["A4"] = "必须保留A列"
-        sheet["B4"] = 123
-        sheet["O4"] = "表格"
+        sheet = book.create_sheet("125kW新增章节")
+        sheet["A1"] = "参数"
+        sheet["B1"] = "数值"
+        sheet["O1"] = "表头"
+        sheet["A2"] = "必须保留A列"
+        sheet["B2"] = 123
+        sheet["O2"] = "表格"
 
     result = parse(modified(tmp_path, change), tmp_path)
     assert result.valid, result.issues
@@ -149,6 +150,30 @@ def test_new_table_can_start_in_column_a(tmp_path):
     table = result.document.chapters[-1].items[0]
     assert isinstance(table, Table)
     assert [c.text for c in table.rows[1]] == ["必须保留A列", "123"]
+
+
+def test_sheet_name_is_chapter_title_and_legacy_layout_still_uploads(tmp_path):
+    def change(book):
+        book["外观检查"].title = "1、外观检查"
+        # Older workbooks: a 目录 sheet, a header row (O1=格式) and a 二级标题 row.
+        contents = book.create_sheet("目录")
+        contents["C3"] = 5.1
+        contents["E3"] = "不应成为章节"
+        legacy = book.create_sheet("旧版章节")
+        legacy["A1"] = "标题 / 测试内容"
+        legacy["O1"] = "格式"
+        legacy["A2"] = "5.9 以工作表名称为准的旧标题"
+        legacy["O2"] = "二级标题"
+        legacy["A3"] = "说明文字"
+        legacy["O3"] = "段落"
+
+    result = parse(modified(tmp_path, change), tmp_path)
+    assert result.valid, result.issues
+    titles = [c.title for c in result.document.chapters]
+    assert titles[0] == "外观检查" and titles[-1] == "旧版章节"
+    assert "不应成为章节" not in json.dumps(result.document.to_dict(), ensure_ascii=False)
+    legacy = result.document.chapters[-1]
+    assert [i.text for i in legacy.items] == ["说明文字"]
 
 
 def test_page_overflow_is_an_explicit_generation_error():
@@ -414,8 +439,6 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
         from app.models import Template
 
         with SessionLocal.begin() as db:
-            from sqlalchemy import select
-
             template = db.scalar(
                 select(Template).where(Template.key == "cabinet-test-plan")
             )
@@ -463,6 +486,9 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
             headers=headers,
         )
         assert repeat.json()["id"] == task_id
+        # A project whose generation is still queued cannot be deleted under the worker.
+        busy = client.delete(url, headers=headers)
+        assert busy.status_code == 409, busy.text
         from app.cabinet_plan.worker import (
             claim_cabinet_plan_task,
             run_cabinet_plan_task,
@@ -519,3 +545,48 @@ def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatc
             ).status_code
             == 409
         )
+        # Other users cannot delete it; the owner deletes rows and stored files.
+        assert client.delete(url, headers=headers).status_code == 404
+        assert client.delete(f"{base}/projects/{own['id']}", headers=headers).status_code == 204
+        assert client.get(f"{base}/projects/{own['id']}").status_code == 404
+        client.post("/api/auth/logout", headers=headers)
+        login = client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "test-admin-password"},
+        )
+        headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+        from app.cabinet_plan.models import (
+            CabinetPlanGeneratedDocument,
+            CabinetPlanProject,
+            CabinetPlanSourceFile,
+        )
+
+        with SessionLocal() as db:
+            document_path = Path(
+                db.scalar(
+                    select(CabinetPlanGeneratedDocument.file_path).where(
+                        CabinetPlanGeneratedDocument.project_id == p["id"]
+                    )
+                )
+            )
+            source_path = Path(
+                db.scalar(
+                    select(CabinetPlanSourceFile.original_path)
+                    .where(CabinetPlanSourceFile.project_id == p["id"])
+                    .limit(1)
+                )
+            )
+        assert document_path.is_file() and source_path.is_file()
+        assert client.delete(url, headers=headers).status_code == 204
+        assert client.get(url).status_code == 404
+        assert not document_path.parent.exists() and not source_path.parents[1].exists()
+        with SessionLocal() as db:
+            for model in (
+                CabinetPlanProject,
+                CabinetPlanSourceFile,
+                CabinetPlanGenerationTask,
+                CabinetPlanGeneratedDocument,
+            ):
+                column = model.id if model is CabinetPlanProject else model.project_id
+                assert db.scalar(select(func.count()).where(column == p["id"])) == 0
+        assert all(item["id"] != p["id"] for item in client.get(base + "/projects").json())

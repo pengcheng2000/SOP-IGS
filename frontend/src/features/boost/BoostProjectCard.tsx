@@ -1,13 +1,14 @@
 import { FileExcelOutlined } from "@ant-design/icons";
 import { Card, Space, Tag, Typography } from "antd";
+import ProjectDeleteButton from "../../components/ProjectDeleteButton";
 import type { BoostProject } from "./types";
 
 const { Title, Paragraph } = Typography;
 
-export default function BoostProjectCard({ project, onOpen }: { project: BoostProject; onOpen: (project: BoostProject) => void }) {
+export default function BoostProjectCard({ project, onOpen, onDeleted }: { project: BoostProject; onOpen: (project: BoostProject) => void; onDeleted: () => void }) {
   const source = project.source_file;
   return (
-    <Card className="project-card" hoverable onClick={() => onOpen(project)}>
+    <Card className="project-card" hoverable onClick={() => onOpen(project)} actions={[<ProjectDeleteButton key="delete" name={project.name} path={`/api/boost/projects/${project.id}`} onDeleted={onDeleted} />]}>
       <div className="project-card-head">
         <div className="project-icon"><FileExcelOutlined /></div>
         <Space size={4}><Tag color="purple">升压一体机</Tag><Tag>测试方案</Tag><Tag color={project.status === "active" ? "green" : "default"}>{project.status === "active" ? "进行中" : project.status}</Tag></Space>

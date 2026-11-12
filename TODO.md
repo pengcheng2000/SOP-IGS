@@ -6,6 +6,7 @@
 
 * After any future master change, re-review it and update `approved_master_sha256` in that template's `manifest.yaml` (deployments then need nothing).
 * Complete cross-machine browser UAT for both product choices through `http://10.122.3.224:8010`.
+* Business-confirm the 2026-11-12 cabinet-plan changes before shipping: new first-page title block (matches the workbook 首页), chapter headings now taken from sheet names, and the project delete button; then deploy with the header compatibility patch.
 
 ## Next
 

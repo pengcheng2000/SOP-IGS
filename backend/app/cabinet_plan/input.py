@@ -57,7 +57,11 @@ FORMATS = {
     "表格",
     "图片",
 }
+# 目录 is only ignored so that workbooks from the older template still upload; the
+# summary page of the Word document is always generated from the chapter sheets.
 IGNORED = {"填写说明", "内容核对", "首页", "目录"}
+CLOSING_SHEET_PREFIX = "出厂配置"
+FORMAT_COLUMN = 15
 HEADING_PREFIX = re.compile(r"^\s*\d+(?:\.\d+)*(?:[、\s]+|\.(?!\d))")
 LIST_PREFIX = re.compile(r"^\s*(?:\d+[)）.]|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳])\s*")
 
@@ -285,7 +289,7 @@ def parse_workbook(
             if table:
                 extra[key] = _item_to_dict(table)
     ignored = set(IGNORED)
-    for key in ("home", "summary", "template_version"):
+    for key in ("home", "template_version"):
         found = named(key)
         if found:
             ignored.add(found[0].name)
@@ -311,7 +315,12 @@ def parse_workbook(
         for grid in grids:
             if grid.name in ignored or "待整理" in grid.name or not any(grid.cells.values()):
                 continue
-            if grid.text(1, 15) != "格式":
+            # Older workbooks start with a header row labelled 格式 in O1; the current
+            # template has no header row and its first row is already body content.
+            has_header = grid.text(1, FORMAT_COLUMN) == "格式"
+            if not has_header and not any(
+                col == FORMAT_COLUMN and text for (_, col), text in grid.cells.items()
+            ):
                 issues.append(
                     Issue(
                         ERROR,
@@ -322,13 +331,24 @@ def parse_workbook(
                     )
                 )
                 continue
+            title = HEADING_PREFIX.sub("", grid.name).strip()
+            if not title:
+                issues.append(
+                    Issue(
+                        ERROR,
+                        "EMPTY_HEADING",
+                        "工作表名称即章节标题，不能只有编号",
+                        grid.name,
+                        "A1",
+                    )
+                )
+                continue
             items = []
-            title = None
-            closing = False
+            closing = title.startswith(CLOSING_SHEET_PREFIX)
             revision = False
             level3 = False
             seen_lists = set()
-            row = 2
+            row = 2 if has_header else 1
             while row <= grid.max_row:
                 fmt = grid.text(row, 15)
                 values = [(c, grid.text(row, c)) for c in range(1, 15) if grid.text(row, c)]
@@ -375,25 +395,15 @@ def parse_workbook(
                     continue
                 for (col, value), format_ in zip(values, formats):
                     src = f"{grid.name}!{coord(row, col)}"
+                    if format_ == "二级标题":
+                        continue  # legacy title row; the chapter title is the sheet name
                     if format_.endswith("级标题"):
                         text = HEADING_PREFIX.sub("", value).strip()
                         if not text:
                             issues.append(Issue(ERROR, "EMPTY_HEADING", "标题不能只有编号", grid.name, coord(row, col)))
                             continue
-                        if format_ == "二级标题":
-                            if title is not None or items or closing:
-                                issues.append(
-                                    Issue(
-                                        ERROR,
-                                        "MULTIPLE_CHAPTERS",
-                                        "每张测试工作表只允许一个二级标题，放在正文开头",
-                                        grid.name,
-                                        coord(row, col),
-                                    )
-                                )
-                            title = text
-                        elif format_ == "一级标题":
-                            if text.startswith("出厂配置"):
+                        if format_ == "一级标题":
+                            if text.startswith(CLOSING_SHEET_PREFIX):
                                 closing = True
                             elif text == "版本修改记录":
                                 revision = True
@@ -447,15 +457,11 @@ def parse_workbook(
             if closing:
                 if extra["closing"]:
                     issues.append(
-                        Issue(ERROR, "DUPLICATE_CLOSING", "出厂配置章节重复", grid.name, "A2")
+                        Issue(ERROR, "DUPLICATE_CLOSING", "出厂配置章节重复", grid.name, "A1")
                     )
                 extra["closing"] = [_item_to_dict(i) for i in items]
-            elif title:
-                chapters.append(Chapter(title, grid.name, tuple(items)))
             else:
-                issues.append(
-                    Issue(ERROR, "MISSING_CHAPTER_TITLE", "缺少二级测试章节标题", grid.name, "A2")
-                )
+                chapters.append(Chapter(title, grid.name, tuple(items)))
     except (ValueError, WorkbookError) as exc:
         issues.append(Issue(ERROR, getattr(exc, "code", "INVALID_WORKBOOK"), str(exc)))
     if not chapters:
@@ -473,7 +479,7 @@ def parse_workbook(
                     "ALTERNATIVES_REMAIN",
                     "仍保留多个相色标准，请确认已按项目取舍；系统将按 Excel 全部输出",
                     grid.name,
-                    "A2",
+                    "A1",
                 )
             )
         if "1P260S" in values and "1P416S" in values:
@@ -483,7 +489,7 @@ def parse_workbook(
                     "ALTERNATIVES_REMAIN",
                     "仍保留两种电池簇测试表，请确认已按项目取舍；系统将按 Excel 全部输出",
                     grid.name,
-                    "A2",
+                    "A1",
                 )
             )
         for (r, c), value in grid.cells.items():

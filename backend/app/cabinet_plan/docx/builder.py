@@ -84,7 +84,7 @@ def generate_cabinet_plan_docx(
         return p
 
     def compact(elements):
-        """Keep tables compact while retaining the case's home heading/text styles."""
+        """Keep home tables compact while matching boost home heading/text styles."""
         for element in elements:
             in_table = element.tag == q("w", "tbl")
             for p in element.iter(q("w", "p")):
@@ -99,8 +99,8 @@ def generate_cabinet_plan_docx(
                             for node in props.findall(f"w:{tag}", NS):
                                 props.remove(node)
                     for s in props.findall("w:spacing", NS):
-                        s.set(q("w", "line"), "240" if in_table else "360")
-                        s.set(q("w", "after"), "0")
+                        s.set(q("w", "line"), "360" if is_heading else "240")
+                        s.set(q("w", "after"), "0" if (is_heading or in_table) else "120")
                         s.set(q("w", "before"), "0")
                     for ind in props.findall("w:ind", NS):
                         props.remove(ind)
@@ -125,7 +125,15 @@ def generate_cabinet_plan_docx(
     home.append(builder.table(_item_from_dict(document.extra["instruments"])))
     anchor = find("{{HOME_CONTENT}}")
     compact(home)
-    for paragraph in scope_paragraphs + reference_paragraphs:
+    for paragraph in scope_paragraphs:
+        props = paragraph.find("w:pPr", NS)
+        indent = etree.SubElement(props, q("w", "ind"))
+        indent.set(q("w", "left"), "420")
+        indent.set(q("w", "firstLine"), "0")
+        run_props = props.find("w:rPr", NS)
+        if run_props is not None:
+            run_props.addprevious(indent)
+    for paragraph in reference_paragraphs:
         props = paragraph.find("w:pPr", NS)
         indent = etree.SubElement(props, q("w", "ind"))
         indent.set(q("w", "left"), "0")

@@ -288,30 +288,44 @@ def test_generation_contains_live_fields_and_frozen_date(tmp_path):
             "//w:fldSimple[contains(@w:instr, 'NUMPAGES')]", namespaces=NS
         )
         assert not root.xpath("//w:tbl[.//w:t[text()='批准']]", namespaces=NS)
+        title_p = root.find("w:body/w:p", NS)
+        assert title_p.find("w:r/w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == "32"
+        assert (
+            title_p.find("w:r/w:rPr/w:rFonts", NS).get("{" + NS["w"] + "}eastAsia")
+            == "楷体"
+        )
         body = next(
             p
             for p in root.findall("w:body/w:p", NS)
             if "户外柜的外观检查" in "".join(p.xpath(".//w:t/text()", namespaces=NS))
         )
         indent = body.find("w:pPr/w:ind", NS)
-        assert indent.get("{" + NS["w"] + "}left") == "840"
-        assert indent.get("{" + NS["w"] + "}firstLine") == "0"
+        assert indent.get("{" + NS["w"] + "}left") == "210"
+        assert indent.get("{" + NS["w"] + "}firstLine") == "420"
         numbering = etree.fromstring(archive.read("word/numbering.xml"))
         levels = numbering.xpath(
             "//w:abstractNum[@w:abstractNumId='9100']/w:lvl", namespaces=NS
         )
-        for level in levels:
+        expected_levels = [
+            ("%1.", 0, "425", True, "24"),
+            ("%1.%2.", 0, "630", True, "24"),
+            ("%1.%2.%3.", 210, "960", False, "21"),
+            ("%1.%2.%3.%4.", 420, "1320", False, "21"),
+        ]
+        for level, (lvl_text, start_x, text_left, is_bold, sz) in zip(
+            levels, expected_levels, strict=True
+        ):
+            assert level.find("w:lvlText", NS).get("{" + NS["w"] + "}val") == lvl_text
             indent = level.find("w:pPr/w:ind", NS)
+            assert indent.get("{" + NS["w"] + "}left") == text_left
             assert (
                 int(indent.get("{" + NS["w"] + "}left"))
                 - int(indent.get("{" + NS["w"] + "}hanging"))
-                == 210
+                == start_x
             )
-            assert level.find("w:rPr/w:b", NS).get("{" + NS["w"] + "}val") == "0"
-            assert level.find("w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == "24"
-        root_level = levels[0]
-        assert root_level.find("w:lvlText", NS).get("{" + NS["w"] + "}val") == "%1."
-        assert root_level.find("w:pPr/w:ind", NS).get("{" + NS["w"] + "}left") == "630"
+            bold_node = level.find("w:rPr/w:b", NS)
+            assert (bold_node is not None and bold_node.get("{" + NS["w"] + "}val") != "0") == is_bold
+            assert level.find("w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == sz
         for title in ["适用范围", "参考文献", "测试环境", "调试工装仪器明细"]:
             heading = next(
                 p
@@ -323,6 +337,8 @@ def test_generation_contains_live_fields_and_frozen_date(tmp_path):
             assert (
                 heading.find("w:r/w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == "24"
             )
+            bold_node = heading.find("w:r/w:rPr/w:b", NS)
+            assert bold_node is not None and bold_node.get("{" + NS["w"] + "}val") != "0"
         for heading in root.xpath(
             "./w:body/w:p[w:pPr/w:numPr/w:numId[@w:val='9100']]", namespaces=NS
         ):
@@ -330,9 +346,14 @@ def test_generation_contains_live_fields_and_frozen_date(tmp_path):
                 "./w:pPr/w:keepNext|./w:pPr/w:keepLines|./w:pPr/w:pageBreakBefore",
                 namespaces=NS,
             )
-            assert heading.find("w:r/w:rPr/w:b", NS).get("{" + NS["w"] + "}val") == "0"
-            assert (
-                heading.find("w:r/w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == "24"
+            ilvl = int(
+                heading.find("w:pPr/w:numPr/w:ilvl", NS).get("{" + NS["w"] + "}val")
+            )
+            bold_node = heading.find("w:r/w:rPr/w:b", NS)
+            is_bold = bold_node is not None and bold_node.get("{" + NS["w"] + "}val") != "0"
+            assert is_bold == (ilvl in (0, 1))
+            assert heading.find("w:r/w:rPr/w:sz", NS).get("{" + NS["w"] + "}val") == (
+                "24" if ilvl in (0, 1) else "21"
             )
         from app.cabinet_plan.docx.content import validate_body_content
         from app.document_common.ooxml import DocxGenerationError
@@ -352,8 +373,8 @@ def test_generation_contains_live_fields_and_frozen_date(tmp_path):
             "//w:abstractNum[@w:abstractNumId='9201']/w:lvl[@w:ilvl='0']/w:pPr/w:ind",
             namespaces=NS,
         )[0]
-        assert list_indent.get("{" + NS["w"] + "}left") == "1260"
-        assert list_indent.get("{" + NS["w"] + "}hanging") == "420"
+        assert list_indent.get("{" + NS["w"] + "}left") == "945"
+        assert list_indent.get("{" + NS["w"] + "}hanging") == "315"
 
 
 def test_api_excel_priority_snapshot_permissions_and_worker(tmp_path, monkeypatch):

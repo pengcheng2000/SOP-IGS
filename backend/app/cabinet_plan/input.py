@@ -447,6 +447,8 @@ def parse_workbook(
                                 )
                             )
                             seen_lists.add(style)
+                            if style == "decimal":
+                                seen_lists.discard("circle")
                             items.extend(Paragraph(line, "indent", src) for line in lines[1:])
                         elif format_ != "图片":
                             p_kind = {"注意": "note", "缩进段落": "indent"}.get(format_, "body")

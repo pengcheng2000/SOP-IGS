@@ -2,7 +2,7 @@ template_key: cabinet-test-plan
 version: '1'
 manifest_version: '1'
 source_sha256: 752cdbc767421939d82e97dbebaac42db44a1fe2de823bfa0f1bf7ad66879798
-master_sha256: a803f3d496f6b31ddd2fd58462653cfd3813d5759a86f8dbe8cfcd4e2b8f5dc7
+master_sha256: 4f7ed1175279ca13b9e35e7f40781b38eb7ffb910c53c2b2280cd04f040e40fc
 fields:
 - key: document_title
   label: 文档标题
@@ -46,4 +46,5 @@ list_abstract_nums:
   decimal: '9201'
   circle: '9202'
 floating_drawings: 0
-approved_master_sha256: a803f3d496f6b31ddd2fd58462653cfd3813d5759a86f8dbe8cfcd4e2b8f5dc7
+table_header_bold: false
+approved_master_sha256: 4f7ed1175279ca13b9e35e7f40781b38eb7ffb910c53c2b2280cd04f040e40fc

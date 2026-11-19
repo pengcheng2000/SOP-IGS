@@ -60,7 +60,17 @@ def set_prop(parent, tag, **attrs):
     return node
 
 
-def clean_paragraph(prototype, text, size=21, bold=False, heading=None):
+def clean_paragraph(
+    prototype,
+    text,
+    size=21,
+    bold=False,
+    heading=None,
+    *,
+    east_asia="宋体",
+    after=0,
+    line=300,
+):
     p = _paragraph_like(prototype, text)
     pr = p.find("w:pPr", NS)
     if pr is None:
@@ -80,7 +90,7 @@ def clean_paragraph(prototype, text, size=21, bold=False, heading=None):
     ):
         for n in pr.findall(f"w:{tag}", NS):
             pr.remove(n)
-    set_prop(pr, "spacing", before=0, after=0, line=300, lineRule="auto")
+    set_prop(pr, "spacing", before=0, after=after, line=line, lineRule="auto")
     if heading:
         set_prop(pr, "outlineLvl", val=heading - 1)
     for run in p.findall("w:r", NS):
@@ -104,13 +114,14 @@ def clean_paragraph(prototype, text, size=21, bold=False, heading=None):
             rp,
             "rFonts",
             ascii="Times New Roman",
-            eastAsia="宋体",
+            eastAsia=east_asia,
             hAnsi="Times New Roman",
         )
         set_prop(rp, "sz", val=size)
         set_prop(rp, "szCs", val=size)
         if bold:
             set_prop(rp, "b")
+            set_prop(rp, "bCs")
         elif heading is not None:
             set_prop(rp, "b", val=0)
             set_prop(rp, "bCs", val=0)
@@ -130,7 +141,7 @@ def sanitize_table(table, size=18):
                     for n in tcpr.findall(f"w:{tag}", NS):
                         tcpr.remove(n)
             for p in list(cell.findall("w:p", NS)):
-                replacement = clean_paragraph(p, paragraph_text(p), size=size)
+                replacement = clean_paragraph(p, paragraph_text(p), size=size, line=240)
                 p.addprevious(replacement)
                 cell.remove(p)
     return table
@@ -293,7 +304,9 @@ def build(source: Path, out: Path):
             package.content_types.remove(node)
     for node in list(package.body):
         package.body.remove(node)
-    title = clean_paragraph(body_proto, "{{document_title}}", size=30)
+    title = clean_paragraph(
+        body_proto, "{{document_title}}", size=32, east_asia="楷体"
+    )
     for rp in title.findall("w:r/w:rPr", NS):
         set_prop(rp, "b", val=0)
         set_prop(rp, "bCs", val=0)
@@ -418,30 +431,36 @@ def build(source: Path, out: Path):
     package.body.append(p("{{SUMMARY_PAGE}}"))
     package.body.append(p("{{BODY_CONTENT}}"))
     package.body.append(p("{{PROTOTYPES_BEGIN}}"))
-    for key, level in [("h1", 1), ("h2", 2), ("h3", 3), ("h4", 4)]:
-        package.body.append(
-            clean_paragraph(
-                body_proto,
-                "{{PROTO:" + key + "}}",
-                size=24,
-                bold=False,
-                heading=level,
-            )
-        )
-    for key in ["body", "indent", "list", "note"]:
-        para = clean_paragraph(body_proto, "{{PROTO:" + key + "}}", size=21)
-        set_prop(
-            para.find("w:pPr", NS),
-            "spacing",
-            before=0,
-            after=0,
+    for key, level, font_size, is_bold in [
+        ("h1", 1, 24, True),
+        ("h2", 2, 24, True),
+        ("h3", 3, 21, False),
+        ("h4", 4, 21, False),
+    ]:
+        heading_para = clean_paragraph(
+            body_proto,
+            "{{PROTO:" + key + "}}",
+            size=font_size,
+            bold=is_bold,
+            heading=level,
+            after=120,
             line=360,
-            lineRule="auto",
+        )
+        if level in (1, 2):
+            set_prop(heading_para.find("w:pPr", NS), "jc", val="both")
+        package.body.append(heading_para)
+    for key in ["body", "indent", "list", "note"]:
+        para = clean_paragraph(
+            body_proto,
+            "{{PROTO:" + key + "}}",
+            size=21,
+            after=120,
+            line=360,
         )
         if key in {"body", "note"}:
-            set_prop(para.find("w:pPr", NS), "ind", left=840, firstLine=0)
+            set_prop(para.find("w:pPr", NS), "ind", left=210, firstLine=420)
         if key == "indent":
-            set_prop(para.find("w:pPr", NS), "ind", left=1260, firstLine=0)
+            set_prop(para.find("w:pPr", NS), "ind", left=945, firstLine=0)
         package.body.append(para)
     for row in list(table_proto.findall("w:tr", NS))[2:]:
         table_proto.remove(row)
@@ -558,20 +577,25 @@ def build(source: Path, out: Path):
         section.insert(0, reference)
     package.body.append(section)
     numbering = package.part("word/numbering.xml")
+    heading_layouts = [
+        # (left, hanging, size, bold) — unified with boost-integrated-unit
+        (425, 425, 24, True),   # level 1: 1.
+        (630, 630, 24, True),   # level 2: 5.1. .. 5.16.
+        (960, 750, 21, False),  # level 3: 5.1.1. .. 5.16.2. (starts at 210 dxa)
+        (1320, 900, 21, False), # level 4: 5.1.1.1. (starts at 420 dxa)
+    ]
     for aid, styles in [
         (
             "9100",
             [
                 (
                     "decimal",
-                    "%1."
-                    if level == 0
-                    else ".".join("%" + str(i + 1) for i in range(level + 1)),
+                    ".".join("%" + str(i + 1) for i in range(level + 1)) + ".",
                 )
                 for level in range(4)
             ],
         ),
-        ("9201", [("decimal", "%1）"), ("lowerLetter", "%2)")]),
+        ("9201", [("decimal", "%1)"), ("lowerLetter", "%2)")]),
         ("9202", [("decimalEnclosedCircle", "%1"), ("lowerLetter", "%2)")]),
     ]:
         abstract = E.Element(q("w", "abstractNum"))
@@ -585,22 +609,21 @@ def build(source: Path, out: Path):
             set_prop(lvl, "lvlJc", val="left")
             pp = E.SubElement(lvl, q("w", "pPr"))
             if aid == "9100":
-                # All heading numbers share the same inset from the frame;
-                # longer hierarchical numbers get wider hanging-indent slots.
-                text_left = 630 if level == 0 else 690 + level * 240
+                text_left, hanging, sz, is_bold = heading_layouts[level]
                 tabs = set_prop(pp, "tabs")
                 set_prop(tabs, "tab", val="num", pos=text_left)
-                set_prop(pp, "ind", left=text_left, hanging=text_left - 210)
+                set_prop(pp, "ind", left=text_left, hanging=hanging)
                 suffix = E.Element(q("w", "suff"))
                 suffix.set(q("w", "val"), "tab")
                 lvl.find("w:lvlText", NS).addprevious(suffix)
             else:
-                # Four characters before the number; wrapped text aligns at the
-                # tab stop, with a deeper position for circled sub-items.
-                text_left = 1260 if aid == "9201" else 1680
+                # Unified with boost: decimal numbers align at 630 dxa (3 chars)
+                # with text at 945 dxa (4.5 chars); circled sub-items start at 945 dxa
+                # with text at 1260 dxa (6 chars).
+                text_left = 945 if aid == "9201" else 1260
                 if level:
-                    text_left += 420
-                set_prop(pp, "ind", left=text_left, hanging=420)
+                    text_left += 315
+                set_prop(pp, "ind", left=text_left, hanging=315)
                 tabs = set_prop(pp, "tabs")
                 set_prop(tabs, "tab", val="num", pos=text_left)
                 pp.find("w:ind", NS).addprevious(tabs)
@@ -611,14 +634,23 @@ def build(source: Path, out: Path):
             set_prop(
                 rp,
                 "rFonts",
-                ascii="Times New Roman" if aid == "9100" else "宋体",
+                ascii="Times New Roman",
+                hAnsi="Times New Roman",
                 eastAsia="宋体",
             )
             if aid == "9100":
-                set_prop(rp, "b", val=0)
-                set_prop(rp, "bCs", val=0)
-                set_prop(rp, "sz", val=24)
-                set_prop(rp, "szCs", val=24)
+                _, _, sz, is_bold = heading_layouts[level]
+                if is_bold:
+                    set_prop(rp, "b")
+                    set_prop(rp, "bCs")
+                else:
+                    set_prop(rp, "b", val=0)
+                    set_prop(rp, "bCs", val=0)
+                set_prop(rp, "sz", val=sz)
+                set_prop(rp, "szCs", val=sz)
+            else:
+                set_prop(rp, "sz", val=21)
+                set_prop(rp, "szCs", val=21)
         numbering.insert(0, abstract)
     num = E.SubElement(numbering, q("w", "num"))
     num.set(q("w", "numId"), "9100")
@@ -645,6 +677,7 @@ def build(source: Path, out: Path):
         },
         "list_abstract_nums": {"decimal": "9201", "circle": "9202"},
         "floating_drawings": 0,
+        "table_header_bold": False,
     }
     (out / "manifest.yaml").write_text(
         yaml.safe_dump(manifest, allow_unicode=True, sort_keys=False), encoding="utf-8"
